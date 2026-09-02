@@ -23,8 +23,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
@@ -48,17 +48,30 @@ jobs:
       # broken bundle dies before any of it runs. Every unit test above passes
       # against src/, which does not exercise the bundle at all.
       #
-      # Running it with no inputs reaches the first thing it checks, which
-      # means the whole module graph loaded.
+      # Running it with nothing reaches the first thing it checks, which means
+      # the whole module graph loaded.
+      #
+      # `env -i` is load-bearing, not tidiness. A runner sets GITHUB_REPOSITORY
+      # and GITHUB_EVENT_PATH, which the action reads as its defaults, so
+      # inheriting the environment moves which input check fires first and the
+      # assertion below stops describing anything. Isolating it makes the
+      # answer the same here as on a laptop.
       - name: Prove the bundle loads
         run: |
           set +e
-          output=$(node dist/index.mjs 2>&1)
+          output=$(env -i PATH="$PATH" node dist/index.mjs 2>&1)
           status=$?
           set -e
           echo "$output"
           if [[ $status -eq 0 ]]; then
             echo "::error::the bundle should have failed on a missing repository" >&2
+            exit 1
+          fi
+          # The regression this exists for. esbuild leaves the CommonJS
+          # `require` calls it cannot resolve to a stub that throws, and the
+          # message is distinctive.
+          if grep -qE "Dynamic require of|ERR_MODULE_NOT_FOUND|Cannot find package" <<<"$output"; then
+            echo "::error::the bundle did not load: see the message above" >&2
             exit 1
           fi
           if ! grep -q "could not determine the repository" <<<"$output"; then

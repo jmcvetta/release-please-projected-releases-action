@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ !startsWith(github.event.pull_request.head.ref, 'release-please--') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: jmcvetta/release-please-projected-releases-action@v1
