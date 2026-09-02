@@ -476,3 +476,69 @@ describe("a package whose config names no component", () => {
     expect(out).not.toContain("None —");
   });
 });
+
+// release-please attributes releases itself, and its plugins release
+// components no file of the pull request is under. `linked-versions` is the
+// plain case: touching one component bumps every component in the group.
+// Filtering the projection down to the touched components dropped those
+// rows, understating the merge or reporting nothing for it at all.
+describe("a release for a component the pull request does not touch", () => {
+  const CONFIG_LINKED = {
+    "separate-pull-requests": true,
+    plugins: [
+      {
+        type: "linked-versions",
+        groupName: "acme",
+        components: ["acme-api", "acme-ui"],
+      },
+    ],
+    packages: {
+      api: {
+        "release-type": "simple",
+        component: "acme-api",
+        "include-component-in-tag": true,
+        "tag-separator": "@",
+      },
+      ui: {
+        "release-type": "simple",
+        component: "acme-ui",
+        "include-component-in-tag": true,
+        "tag-separator": "@",
+      },
+    },
+  };
+
+  async function linked(): Promise<Projection> {
+    return project({
+      github: fakeScm({ config: CONFIG_LINKED, manifest: MANIFEST }),
+      config: CONFIG_LINKED,
+      manifest: MANIFEST,
+      commit: {
+        title: "feat: a thing",
+        body: "",
+        files: ["api/src/x.ts"],
+        number: 7,
+        headSha: "abcdef1234567890",
+        headBranch: "topic",
+        baseBranch: "master",
+      },
+    });
+  }
+
+  it("projects the linked component release-please carries along", async () => {
+    expect(versions(await linked())).toEqual({
+      "acme-api": "2.5.0",
+      "acme-ui": "2.5.0",
+    });
+    expect((await linked()).touched.has("ui")).toBe(false);
+  });
+
+  it("keeps it in the table", async () => {
+    const out = render(await linked(), {
+      title: "feat: a thing",
+      malformed: false,
+    });
+    expect(out).toContain("`acme-api@v2.5.0`");
+    expect(out).toContain("`acme-ui@v2.5.0`");
+  });
+});

@@ -157,20 +157,32 @@ function renderProjection(
   const unclaimed = claimOrder(byComponent, new Set(projection.touched.keys()));
   const pendingBy = groupBy(projection.pending, (r) => r.component);
 
-  const rows: Row[] = projection.projected
-    .filter((r) => touched.has(r.component))
-    .flatMap((projected) => {
-      // Each release takes a package of its own. A component name is not
-      // unique across packages, and handing the same package to two releases
-      // lent one of them the other's current version, path and tag.
-      const pkg = unclaimed.get(projected.component)?.shift();
-      return pkg
-        ? [{ pkg, projected, pending: pendingBy.get(projected.component)?.shift() }]
-        : [];
-    });
+  const rows: Row[] = projection.projected.flatMap((projected) => {
+    // Each release takes a package of its own. A component name is not
+    // unique across packages, and handing the same package to two releases
+    // lent one of them the other's current version, path and tag.
+    const pkg = unclaimed.get(projected.component)?.shift();
+    return pkg
+      ? [{ pkg, projected, pending: pendingBy.get(projected.component)?.shift() }]
+      : [];
+  });
 
+  // A moved version is this pull request's doing whatever files it changed:
+  // the two passes differ only by the merge, so nothing else could have moved
+  // it. release-please attributes releases itself, and its `node-workspace`
+  // and `linked-versions` plugins release components a pull request never
+  // touches — which a filter on the touched components dropped, understating
+  // the merge or reporting nothing for it at all.
+  //
+  // A version that does not move is another matter. That release is coming
+  // from commits already on the target branch, so it is only this pull
+  // request's business for a component it actually reaches.
   const moved = rows.filter((r) => r.pending?.version !== r.projected.version);
-  const unmoved = rows.filter((r) => r.pending?.version === r.projected.version);
+  const unmoved = rows.filter(
+    (r) =>
+      r.pending?.version === r.projected.version &&
+      touched.has(r.projected.component),
+  );
 
   const out = ["## Projected releases", ""];
 

@@ -61945,12 +61945,14 @@ function renderProjection(projection, options) {
   );
   const unclaimed = claimOrder(byComponent, new Set(projection.touched.keys()));
   const pendingBy = groupBy(projection.pending, (r) => r.component);
-  const rows = projection.projected.filter((r) => touched.has(r.component)).flatMap((projected) => {
+  const rows = projection.projected.flatMap((projected) => {
     const pkg = unclaimed.get(projected.component)?.shift();
     return pkg ? [{ pkg, projected, pending: pendingBy.get(projected.component)?.shift() }] : [];
   });
   const moved = rows.filter((r) => r.pending?.version !== r.projected.version);
-  const unmoved = rows.filter((r) => r.pending?.version === r.projected.version);
+  const unmoved = rows.filter(
+    (r) => r.pending?.version === r.projected.version && touched.has(r.projected.component)
+  );
   const out = ["## Projected releases", ""];
   if (moved.length === 0) {
     out.push(
