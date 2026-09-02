@@ -117,6 +117,49 @@ PR_BODY`, squash-only. So the PR **title** becomes the commit subject
 release-please parses, and the PR **body** becomes the commit body carrying
 any `Release-As:` trailer. Check both before merging.
 
+**`PR_BODY` does not mean the body verbatim.** When the branch carries commits
+by another author, GitHub appends a `---------` rule and the
+`Co-authored-by:` lines below whatever the body says. That is appended to the
+squash message, so it lands *after* a trailer that has to be last -- and the
+rule, not the co-author line, is what breaks it.
+
+Measured on this repository's own #1 by running release-please's
+`parseConventionalCommits` over each shape:
+
+| squash message ends with | `RELEASE AS` note |
+|---|---|
+| the trailer | found |
+| trailer, then `Co-authored-by:` | found |
+| trailer, then `---------`, then `Co-authored-by:` | **absent** |
+| trailer, then `---` | **absent** |
+
+#1's stored body was correct and verified correct before merging. It still
+released as 1.0.0, because the corruption happened at squash time, in a
+message nobody had looked at yet. So verifying the stored body is necessary
+and not sufficient: **the last thing to check is the merge box itself, which
+is editable.** Delete the `---------` block there, or move the trailer below
+it, before confirming the merge.
+
+## The release job needs permission to open a pull request
+
+`release-please.yml` falls back to `github.token` when the App variables are
+unset, and that fallback only works if **Settings -> Actions -> General ->
+Allow GitHub Actions to create and approve pull requests** is on. Otherwise
+release-please does all its work, pushes the release branch, and then fails
+on the last call:
+
+```
+release-please failed: GitHub Actions is not permitted to create or approve
+pull requests.
+```
+
+The branch it pushed stays behind, so the failure looks like a partial
+success. Configuring the App (`RELEASE_BOT_APP_ID` + `RELEASE_BOT_PRIVATE_KEY`)
+sidesteps the setting entirely and is worth it for a second reason: GitHub
+suppresses workflow events for anything pushed with the default token, so a
+release pull request opened with it arrives with no checks -- on the one pull
+request whose merge cuts a permanent tag.
+
 ## Bundling breaks things no unit test sees
 
 Three times now, and always the same shape: a dependency's ordinary runtime

@@ -7,8 +7,8 @@
 # version lives in package.json, which the node releaser bumps along with the
 # lockfile and CHANGELOG.md.
 #
-# The first release is 0.1.0, set by a `Release-As: 0.1.0` trailer on the
-# pull request that introduces this workflow. Left alone release-please would
+# The first release is 0.1.0, set by a `Release-As: 0.1.0` trailer on a
+# pull request merged before the release is cut. Left alone release-please would
 # have used its initial version of 1.0.0, since with no prior tag it takes
 # that from the strategy rather than bumping package.json's 0.0.0 -- and
 # `initial-version` is a config-file key that release-please-action exposes no
@@ -47,10 +47,14 @@ jobs:
       # no checks -- on the one pull request whose merge cuts a permanent tag.
       # A GitHub App is a distinct identity, so `test` runs on it normally.
       #
-      # Optional. Set the repository variable RELEASE_BOT_APP_ID and the
-      # secret RELEASE_BOT_PRIVATE_KEY to use one; without them this step is
-      # skipped and the fallback below is the default token, which works and
-      # costs the checks on that pull request.
+      # Set the repository variable RELEASE_BOT_APP_ID and the secret
+      # RELEASE_BOT_PRIVATE_KEY to use one; without them this step is skipped
+      # and the fallback below is the default token. That fallback is not
+      # free: it opens the release pull request with no checks on it, and it
+      # works at all only while Settings -> Actions -> General -> "Allow
+      # GitHub Actions to create and approve pull requests" is on. With that
+      # off, release-please pushes its release branch and then fails on the
+      # call that opens the pull request.
       - id: app-token
         if: vars.RELEASE_BOT_APP_ID != ''
         uses: actions/create-github-app-token@v3
