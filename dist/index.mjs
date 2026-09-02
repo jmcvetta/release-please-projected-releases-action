@@ -62023,9 +62023,15 @@ function renderProjection(projection, options) {
   );
   const unclaimed = claimOrder(byComponent, new Set(projection.touched.keys()));
   const pendingBy = groupBy(projection.pending, (r) => r.component);
-  const rows = projection.projected.flatMap((projected) => {
+  const unmatched = [];
+  const rows = projection.projected.map((projected) => {
     const pkg = unclaimed.get(projected.component)?.shift();
-    return pkg ? [{ pkg, projected, pending: pendingBy.get(projected.component)?.shift() }] : [];
+    if (!pkg) unmatched.push(projected.component);
+    return {
+      pkg: pkg ?? unconfigured(projected, projection),
+      projected,
+      pending: pendingBy.get(projected.component)?.shift()
+    };
   });
   const moved = rows.filter((r) => r.pending?.version !== r.projected.version);
   const unmoved = rows.filter(
@@ -62052,6 +62058,7 @@ function renderProjection(projection, options) {
     out.push("", ...unmoved.map((row) => unmovedNote(row, options)));
   }
   const warnings = warn(projection, options, moved, unmoved, {
+    unmatched,
     shared: byComponent,
     named: new Set(
       [...moved, ...unmoved].map((r) => r.pkg.releaseComponent).filter((c) => shared.has(c))
@@ -62061,6 +62068,17 @@ function renderProjection(projection, options) {
   if (moved.length > 0) out.push("", changelog(moved));
   out.push("", components(projection));
   return out;
+}
+function unconfigured(release, projection) {
+  const separators = new Set(projection.packages.map((p) => p.separator));
+  return {
+    path: "",
+    component: release.component,
+    releaseComponent: release.component,
+    current: void 0,
+    separator: separators.size === 1 ? [...separators][0] : "-",
+    includeComponent: release.component !== ""
+  };
 }
 function groupBy(values, key) {
   const out = /* @__PURE__ */ new Map();
@@ -62145,6 +62163,11 @@ function branch(options) {
 }
 function warn(projection, options, moved, unmoved, components2) {
   const warnings = [...options.advisories ?? []];
+  for (const component of [...new Set(components2.unmatched)].sort()) {
+    warnings.push(
+      `- release-please releases ${component ? `\`${component}\`` : "a component this comment cannot name"}, which matches no configured package here. The row's **Current** and matched files are unknown, and its tag is this comment's reading rather than a configured one.`
+    );
+  }
   for (const component of [...components2.named].sort()) {
     const paths = (components2.shared.get(component) ?? []).map((p) => `\`${p.path}\``).join(", ");
     warnings.push(

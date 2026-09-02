@@ -160,14 +160,24 @@ function renderProjection(
   const unclaimed = claimOrder(byComponent, new Set(projection.touched.keys()));
   const pendingBy = groupBy(projection.pending, (r) => r.component);
 
-  const rows: Row[] = projection.projected.flatMap((projected) => {
+  // Every release gets a row. A release whose component matches no configured
+  // package is the one case where that takes inventing the package, and it is
+  // worth the invention: dropping the row instead made the comment say "None
+  // -- release-please projects no release" for a merge that cuts a tag, which
+  // is the false negative this whole action exists to prevent, and it said it
+  // in silence.
+  const unmatched: string[] = [];
+  const rows: Row[] = projection.projected.map((projected) => {
     // Each release takes a package of its own. A component name is not
     // unique across packages, and handing the same package to two releases
     // lent one of them the other's current version, path and tag.
     const pkg = unclaimed.get(projected.component)?.shift();
-    return pkg
-      ? [{ pkg, projected, pending: pendingBy.get(projected.component)?.shift() }]
-      : [];
+    if (!pkg) unmatched.push(projected.component);
+    return {
+      pkg: pkg ?? unconfigured(projected, projection),
+      projected,
+      pending: pendingBy.get(projected.component)?.shift(),
+    };
   });
 
   // A moved version is this pull request's doing whatever files it changed:
@@ -217,6 +227,7 @@ function renderProjection(
   }
 
   const warnings = warn(projection, options, moved, unmoved, {
+    unmatched,
     shared: byComponent,
     named: new Set(
       [...moved, ...unmoved]
@@ -229,6 +240,35 @@ function renderProjection(
   if (moved.length > 0) out.push("", changelog(moved));
   out.push("", components(projection));
   return out;
+}
+
+/**
+ * unconfigured invents the package a projected release belongs to when no
+ * configured one claims its component.
+ *
+ * It should not happen: the packages come from the same configuration
+ * release-please projected from, and `namePackages` fills in the names it
+ * derives. It did happen, twice, from the two ways that join can be read
+ * wrongly, and both times the row simply vanished. So the fallback is a row
+ * built from what release-please did say, plus a warning naming what is
+ * missing, rather than nothing at all.
+ *
+ * `includeComponent` follows from the component itself: release-please
+ * reports a component only for a package that tags with one (`getComponent`
+ * is the empty string otherwise), so a named release tags with its name. The
+ * separator is the repository's when its packages agree on one, which is the
+ * only evidence available.
+ */
+function unconfigured(release: Release, projection: Projection): PackageConfig {
+  const separators = new Set(projection.packages.map((p) => p.separator));
+  return {
+    path: "",
+    component: release.component,
+    releaseComponent: release.component,
+    current: undefined,
+    separator: separators.size === 1 ? [...separators][0]! : "-",
+    includeComponent: release.component !== "",
+  };
 }
 
 /** groupBy indexes values by a key several of them may share. */
@@ -428,11 +468,22 @@ function warn(
   moved: Row[],
   unmoved: Row[],
   components: {
+    unmatched: readonly string[];
     shared: ReadonlyMap<string, PackageConfig[]>;
     named: ReadonlySet<string>;
   },
 ): string[] {
   const warnings: string[] = [...(options.advisories ?? [])];
+  // The row is shown from release-please's answer alone, so the reader is
+  // told which parts of it this comment could not fill in.
+  for (const component of [...new Set(components.unmatched)].sort()) {
+    warnings.push(
+      `- release-please releases ${component ? `\`${component}\`` : "a component this comment cannot name"},` +
+        " which matches no configured package here. The row's **Current**" +
+        " and matched files are unknown, and its tag is this comment's" +
+        " reading rather than a configured one.",
+    );
+  }
   // Nothing in release-please's answer says which of two packages sharing a
   // component name a release belongs to, so a row that could be either says
   // so rather than presenting a guess as the working.

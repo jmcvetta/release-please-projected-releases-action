@@ -411,3 +411,51 @@ describe("two packages under one component name", () => {
     expect(out).not.toContain("release under one component name");
   });
 });
+
+// The join between a projected release and a configured package is the one
+// place a wrong answer disappears instead of looking wrong: the row was
+// dropped and the comment said "None", for a pull request that really does
+// cut a tag. Two bugs reached it that way. It now shows what release-please
+// said and says what it could not fill in.
+describe("a release whose component matches no configured package", () => {
+  const stray = projection({
+    projected: [
+      { component: "ghost", version: "3.1.0", notes: "### Features\n\n* a thing" },
+    ],
+  });
+
+  it("keeps the row rather than reporting none", () => {
+    const out = body(stray);
+    expect(out).toContain("| `ghost` | `ghost@v3.1.0` |");
+    expect(out).not.toContain("None —");
+  });
+
+  it("says which parts of the row it could not fill in", () => {
+    expect(body(stray)).toContain(
+      "release-please releases `ghost`, which matches no configured package",
+    );
+  });
+
+  it("still names a release the configured packages do claim", () => {
+    const out = body(
+      projection({
+        projected: [
+          { component: "acme-api", version: "2.5.0", notes: "" },
+          { component: "ghost", version: "3.1.0", notes: "" },
+        ],
+      }),
+    );
+    expect(out).toContain("| `acme-api` | `acme-api@v2.5.0` | 2.4.1 |");
+    expect(out).toContain("| `ghost` | `ghost@v3.1.0` | — |");
+  });
+
+  it("spells an unnamed release's tag without a component", () => {
+    const out = body(
+      projection({ packages: [], touched: new Map(), projected: [
+        { component: "", version: "1.0.0", notes: "" },
+      ] }),
+    );
+    expect(out).toContain("`v1.0.0`");
+    expect(out).toContain("a component this comment cannot name");
+  });
+});
