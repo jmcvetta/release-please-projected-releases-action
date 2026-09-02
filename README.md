@@ -5,11 +5,15 @@ merging it will cut — or that nothing is released, which is the common case
 and is stated as an answer rather than left as silence.
 
 ```yaml
-- uses: actions/checkout@v4
+- uses: actions/checkout@v5
   with:
     fetch-depth: 0
-- uses: jmcvetta/release-please-projected-releases-action@v1
+- uses: jmcvetta/release-please-projected-releases-action@v0
 ```
+
+`@v0` because this is pre-1.0: the major tag tracks the latest `0.x`, and a
+minor bump may change behaviour, which is what 0.x means. Pin a full version
+if that matters to you.
 
 ```
 ## Projected releases

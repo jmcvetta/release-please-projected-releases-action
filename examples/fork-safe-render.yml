@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: jmcvetta/release-please-projected-releases-action@v1
+      - uses: jmcvetta/release-please-projected-releases-action@v0
         with:
           mode: render
       # The number travels with the body: a `workflow_run` payload names the

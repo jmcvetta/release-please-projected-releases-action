@@ -45,7 +45,7 @@ jobs:
           number=$(tr -dc '0-9' < pr-number.txt | head -c 12)
           [[ -n "$number" ]] || { echo "::error::no pull request number" >&2; exit 1; }
           echo "number=$number" >> "$GITHUB_OUTPUT"
-      - uses: jmcvetta/release-please-projected-releases-action@v1
+      - uses: jmcvetta/release-please-projected-releases-action@v0
         with:
           mode: comment
           number: ${{ steps.pr.outputs.number }}
