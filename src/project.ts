@@ -224,10 +224,9 @@ export interface ReleaseAsNotes {
  * Whether release-please honours a note is not decided here — that is
  * observed afterwards, from the versions it returned. What is decided here is
  * narrower and still needed: which lines were notes at all. A body that
- * *discusses* the trailer is not asking for a version, and in this repository
- * that body is common (the rule for placing one is documented, and the
- * release it cost is written up), so a mention must be able to stay a
- * mention.
+ * *discusses* the trailer is not asking for a version, and in a repository
+ * whose contributors have been bitten by the placement rule that body is
+ * ordinary, so a mention must be able to stay a mention.
  *
  * A mention stays a mention by being quoted the way prose quotes anything:
  * inside a code fence, in backticks, in a blockquote, or indented. Only a

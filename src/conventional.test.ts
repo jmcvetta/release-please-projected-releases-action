@@ -84,8 +84,8 @@ describe("release branches", () => {
 
   it("recovers a component containing separators", () => {
     const branch =
-      "release-please--branches--master--components--career-scan-agent-cli";
-    expect(componentOfBranch(branch)).toBe("career-scan-agent-cli");
+      "release-please--branches--master--components--acme-api-client";
+    expect(componentOfBranch(branch)).toBe("acme-api-client");
   });
 
   it("leaves an ordinary branch alone", () => {
@@ -159,7 +159,7 @@ describe("resolveTypes", () => {
   });
 });
 
-describe("componentOfBranch, on shapes this repository never had", () => {
+describe("componentOfBranch, on the shapes other repositories have", () => {
   it("reads a branch with no components segment as the unnamed component", () => {
     // A repository releasing one component, or aggregating every component
     // into one pull request, gets this shape. It is still a release branch,

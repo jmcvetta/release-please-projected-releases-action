@@ -3,7 +3,7 @@ import { splitFiles } from "./split.js";
 
 describe("splitFiles", () => {
   it("gives a file to the package that owns its directory", () => {
-    expect(splitFiles(["viewer/main.py"], ["viewer", "career-scan"])).toEqual(
+    expect(splitFiles(["viewer/main.py"], ["viewer", "agent-cli"])).toEqual(
       new Map([["viewer", ["viewer/main.py"]]]),
     );
   });
@@ -29,9 +29,9 @@ describe("splitFiles", () => {
 
   it("handles a dotted package path", () => {
     expect(
-      splitFiles([".claude/workflows/career-scan.js"], [".claude/workflows"]),
+      splitFiles([".github/actions/build.js"], [".github/actions"]),
     ).toEqual(
-      new Map([[".claude/workflows", [".claude/workflows/career-scan.js"]]]),
+      new Map([[".github/actions", [".github/actions/build.js"]]]),
     );
   });
 });

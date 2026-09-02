@@ -6,8 +6,8 @@
  * under squash-merge the only Conventional Commit a pull request contributes
  * is its title, which is not a commit until the merge happens. That is why
  * the answer cannot be had by running release-please as it stands, and why
- * this repository previously mirrored release-please's rules in a separate
- * implementation instead.
+ * the implementation this replaced mirrored release-please's rules in
+ * another language instead.
  *
  * Every commit `Manifest.buildPullRequests()` reads arrives through one call,
  * `github.mergeCommitIterator(targetBranch, options)` (manifest.ts, "Collecting
