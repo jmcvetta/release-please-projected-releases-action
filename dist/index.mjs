@@ -61354,7 +61354,6 @@ var ApiError = class extends Error {
     this.status = status;
   }
 };
-var OPEN_PR_PAGES = 10;
 var Client = class {
   owner;
   repo;
@@ -61416,29 +61415,24 @@ var Client = class {
     };
   }
   /**
-   * openPullRequests lists the open pull requests, following pages.
+   * openPullRequests lists every open pull request, following pages.
    *
-   * There is no server-side filter for the ones this is read for: `/pulls`
-   * selects by exact head branch, not by prefix, and release-please's branches
-   * are only known by their prefix. So the list is read whole.
-   *
-   * The order is GitHub's default, newest first, and deliberately left alone.
-   * A standing release pull request is opened afresh after each release, so in
-   * a repository that actually releases it is among the *newest* open — while
-   * in one where nobody merges it, it is among the oldest. Neither end is
-   * reliably the right one to read first, and no ordering makes the page cap
-   * safe, so the cap reports itself instead of quietly dropping the tail.
+   * The release pull requests it is read for are among the oldest a busy
+   * repository has open — release-please leaves one standing per component
+   * until someone merges it — so a single page of 100, newest first, is
+   * exactly where they are not. Stopping there lost the links in the
+   * repositories most likely to want them.
    */
   async openPullRequests() {
     const prs = [];
-    for (let page = 1; page <= OPEN_PR_PAGES; page++) {
+    for (let page = 1; page <= 10; page++) {
       const batch = await this.request("GET", this.repoPath(`/pulls?state=open&per_page=100&page=${page}`));
       for (const pr of batch) {
         prs.push({ headRefName: pr.head?.ref ?? "", url: pr.html_url ?? "" });
       }
-      if (batch.length < 100) return { prs, complete: true };
+      if (batch.length < 100) break;
     }
-    return { prs, complete: false };
+    return prs;
   }
   /**
    * pullRequestFiles lists the files a pull request changes.
@@ -62444,13 +62438,10 @@ async function standingReleasePrs(client, env) {
   if (!boolInput("link-release-prs", true, env)) return /* @__PURE__ */ new Map();
   try {
     const prefix = input("release-branch-prefix", env);
-    const open = await client.openPullRequests();
-    if (!open.complete) {
-      warning(
-        "this repository has more open pull requests than one run reads, so a release pull request may be missing from the listing and the version it holds may go unlinked. Set `link-release-prs: false` to drop the links altogether."
-      );
-    }
-    return indexReleasePrs(open.prs, prefix || void 0);
+    return indexReleasePrs(
+      await client.openPullRequests(),
+      prefix || void 0
+    );
   } catch (error) {
     warning(`could not list the open release pull requests: ${String(error)}`);
     return /* @__PURE__ */ new Map();

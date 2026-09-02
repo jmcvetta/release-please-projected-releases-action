@@ -9,9 +9,12 @@
  * checked here rather than left to review.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
+import { Client } from "./api.js";
+import type { Fetch } from "./api.js";
+import { post } from "./action.js";
 
 const manifest = parse(
   readFileSync(new URL("../action.yml", import.meta.url), "utf8"),
@@ -72,5 +75,71 @@ describe("action.yml", () => {
     // Node 20 was removed from Actions runners on 2026-09-16.
     expect(manifest.runs.using).toBe("node24");
     expect(manifest.runs.main).toBe("dist/index.mjs");
+  });
+});
+
+/**
+ * Posting the comment can fail two ways that look alike and are not. A fork's
+ * read-only token is forbidden, which is ordinary and must not fail the run.
+ * A pull request that is not there is a mistake in the run's own inputs, and
+ * softening it leaves a green check, no comment, and a warning blaming a
+ * token that was never the problem.
+ */
+describe("post", () => {
+  /** posting is a client whose every call answers with one status. */
+  function posting(status: number): Client {
+    const fetch: Fetch = async () => ({
+      ok: status < 400,
+      status,
+      async text() {
+        return JSON.stringify({ message: "no" });
+      },
+      headers: { get: () => null },
+    });
+    return new Client({ owner: "acme", repo: "widgets", token: "t", fetch });
+  }
+
+  /** annotations captures what the run wrote to the runner. */
+  function annotations(): { lines: string[]; restore: () => void } {
+    const lines: string[] = [];
+    const spy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation((chunk: unknown) => {
+        lines.push(String(chunk));
+        return true;
+      });
+    return { lines, restore: () => spy.mockRestore() };
+  }
+
+  it("warns and carries on when the token may not write", async () => {
+    const { lines, restore } = annotations();
+    try {
+      await post(posting(403), 7, "header", "body");
+    } finally {
+      restore();
+    }
+    expect(lines.join("")).toContain("::warning::");
+    expect(lines.join("")).toContain("read-only token");
+  });
+
+  it("fails on a pull request that is not there", async () => {
+    const { lines, restore } = annotations();
+    try {
+      await expect(post(posting(404), 7, "header", "body")).rejects.toThrow(
+        "pull request #7 was not found",
+      );
+    } finally {
+      restore();
+    }
+    expect(lines.join("")).not.toContain("::warning::");
+  });
+
+  it("still fails on anything else", async () => {
+    const { restore } = annotations();
+    try {
+      await expect(post(posting(500), 7, "header", "body")).rejects.toThrow();
+    } finally {
+      restore();
+    }
   });
 });

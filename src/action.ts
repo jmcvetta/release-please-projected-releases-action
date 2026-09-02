@@ -151,11 +151,22 @@ export async function action(env: Env = process.env): Promise<void> {
  * condition rather than a failure.
  *
  * A pull request from a fork carries a read-only token, so the comment cannot
- * be posted from the `pull_request` event at all. Failing the run there would
- * put a red check on every outside contribution over an advisory comment, so
- * the projection is left in the job summary and the run says why.
+ * be posted from the `pull_request` event at all. That is a 403, and failing
+ * the run on it would put a red check on every outside contribution over an
+ * advisory comment, so the projection is left in the job summary and the run
+ * says why.
+ *
+ * A 404 is not that. It says the pull request is not there to comment on —
+ * the wrong number, or a repository this token cannot see at all — and the
+ * `comment` mode takes its number from an input, which the fork-safe workflow
+ * reads out of an artifact. Softening it would leave a green run with no
+ * comment and a warning naming the wrong cause.
+ *
+ * Exported for the test: the two statuses have to be told apart, and driving
+ * `action()` end to end to reach one line of `catch` would test everything
+ * except it.
  */
-async function post(
+export async function post(
   client: Client,
   number: number,
   header: string,
@@ -165,7 +176,7 @@ async function post(
     const result = await stick(client, number, header, body);
     notice(`projected-releases comment ${result.action} (#${result.id})`);
   } catch (error) {
-    if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
+    if (error instanceof ApiError && error.status === 403) {
       warning(
         "could not post the projected-releases comment: the token cannot" +
           " write to this pull request. A pull request from a fork gets a" +
@@ -173,6 +184,13 @@ async function post(
           " projection is in this run's job summary.",
       );
       return;
+    }
+    if (error instanceof ApiError && error.status === 404) {
+      throw new Error(
+        `could not post the projected-releases comment: pull request #${number}` +
+          " was not found. Check the `number` input, and that the token can" +
+          " see this repository.",
+      );
     }
     throw error;
   }
