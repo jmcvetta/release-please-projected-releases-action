@@ -61856,8 +61856,10 @@ function releaseAsNotes(body) {
   for (const line of body.split(/\r?\n/)) {
     const marker = FENCE.exec(line)?.[1];
     if (marker) {
-      if (fence === void 0) fence = marker[0];
-      else if (marker[0] === fence) fence = void 0;
+      if (fence === void 0) fence = marker;
+      else if (marker[0] === fence[0] && marker.length >= fence.length) {
+        fence = void 0;
+      }
       continue;
     }
     if (fence !== void 0) continue;

@@ -227,6 +227,31 @@ describe("Release-As", () => {
     );
   });
 
+  it("leaves a note inside a nested code fence alone", async () => {
+    // A repository whose contributors have been bitten by the placement rule
+    // writes documentation about it, and documentation about a fenced example
+    // needs a longer fence around it. CommonMark closes a fence only on the
+    // same character, at least as long as the one that opened it; tracking
+    // just the character let the inner three-backtick line close the outer
+    // four-backtick one, and the note in between became a real ask that
+    // release-please then appeared to have ignored.
+    const body = [
+      "How to force a version:",
+      "",
+      "````markdown",
+      "```",
+      "Release-As: 9.9.9",
+      "```",
+      "````",
+      "",
+      "and that is all.",
+    ].join("\n");
+    const projection = await run("fix: a thing", body);
+    expect(versions(projection)).toEqual({ "acme-api": "2.4.2" });
+    expect(projection.ignoredReleaseAs).toBeUndefined();
+    expect(projection.releaseAs).toBeUndefined();
+  });
+
   // Deliberate: a bare note mid-body is the exact shape of the failure this
   // warns about -- non-trailer text below it -- so it is read as an ask.
   it("reads a note left above prose as one that will be ignored", async () => {

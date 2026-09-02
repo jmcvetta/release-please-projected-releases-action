@@ -422,8 +422,17 @@ export function releaseAsNotes(body: string): ReleaseAsNotes {
   for (const line of body.split(/\r?\n/)) {
     const marker = FENCE.exec(line)?.[1];
     if (marker) {
-      if (fence === undefined) fence = marker[0];
-      else if (marker[0] === fence) fence = undefined;
+      // CommonMark closes a fence with the same character, at least as long
+      // as the one that opened it. Keeping only the character let a
+      // three-backtick line close a four-backtick fence, so a body that
+      // quotes a fenced ```` ```Release-As: 1.2.3``` ```` example came apart
+      // at the inner fence and the note inside it was read as a real one --
+      // raising the "was ignored" warning on a pull request that never asked
+      // for a version.
+      if (fence === undefined) fence = marker;
+      else if (marker[0] === fence[0] && marker.length >= fence.length) {
+        fence = undefined;
+      }
       continue;
     }
     if (fence !== undefined) continue;
