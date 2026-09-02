@@ -42,7 +42,7 @@ jobs:
     steps:
       # Full history, so the changed-file diff runs from the merge base rather
       # than falling back to the API's capped file list.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       # The bundle is committed, so there is nothing to install: `uses: ./`
