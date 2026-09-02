@@ -11,6 +11,14 @@
 # workflow checks the pull request out without building it, and this one only
 # downloads a rendered markdown file.
 #
+# What this job must not do is *trust* that file. A `pull_request` run
+# executes the workflow file as the pull request writes it, so a fork can keep
+# `name: Projected releases` while uploading an artifact of its choosing. The
+# body is therefore only ever posted on the pull request the triggering run
+# actually belongs to, which this job resolves from the API rather than
+# reading out of the artifact. What it says is the fork's to write, on its own
+# pull request, which is where a fork could write a comment anyway.
+#
 # Copy to .github/workflows/projected-releases-comment.yml.
 name: Projected releases (comment)
 
@@ -29,22 +37,50 @@ permissions:
 jobs:
   comment:
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.event == 'pull_request'
+    # The conclusion as well as the event. The render job is skipped on
+    # release-please's own release branches and can fail like any other, and
+    # both leave a completed run with no artifact to download -- so without
+    # this the job exists only to die at `download-artifact`, on every release
+    # pull request.
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      !startsWith(github.event.workflow_run.head_branch, 'release-please--')
     steps:
+      # Which pull request this run belongs to, from the API. A `workflow_run`
+      # payload names the run, not the pull request, and for a fork
+      # `workflow_run.pull_requests` is empty -- but the head repository and
+      # branch are on the payload and identify it.
+      #
+      # Not from the artifact: that file is written by a run of the *head's*
+      # workflow, so a number read out of it is a number the fork chose, and
+      # this job holds `pull-requests: write` for every pull request and issue
+      # in the repository.
+      - id: pr
+        # Through the environment, and read by `jq` from the environment too,
+        # so no payload value is ever interpolated into a shell or a program.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          number=$(gh api "repos/$REPO/pulls" \
+            -f state=open \
+            -f "head=${HEAD_REPO%%/*}:$HEAD_BRANCH" \
+            --jq 'map(select(.head.sha == env.HEAD_SHA)) | .[0].number // empty')
+          [[ -n "$number" ]] || {
+            echo "::error::no open pull request at $HEAD_SHA"
+            exit 1
+          }
+          echo "number=$number" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           name: projected-releases
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
-      # Checked rather than trusted. This job holds a write token and the file
-      # came out of a run an outside contributor triggered, so the number is
-      # read from the file rather than interpolated, and reduced to digits
-      # before it reaches a step output.
-      - id: pr
-        run: |
-          number=$(tr -dc '0-9' < pr-number.txt | head -c 12)
-          [[ -n "$number" ]] || { echo "::error::no pull request number" >&2; exit 1; }
-          echo "number=$number" >> "$GITHUB_OUTPUT"
       - uses: jmcvetta/release-please-projected-releases-action@v0
         with:
           mode: comment

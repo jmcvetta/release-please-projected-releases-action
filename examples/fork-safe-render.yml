@@ -30,12 +30,12 @@ jobs:
       - uses: jmcvetta/release-please-projected-releases-action@v0
         with:
           mode: render
-      # The number travels with the body: a `workflow_run` payload names the
-      # run, not the pull request that caused it.
-      - run: echo "${{ github.event.pull_request.number }}" > pr-number.txt
+      # The rendered body, and nothing else. Which pull request it belongs to
+      # is not sent along with it: a `pull_request` run executes the workflow
+      # file as the pull request writes it, so anything this job uploads is
+      # the head's to choose, and the posting job resolves the number from the
+      # API instead. See examples/fork-safe-comment.yml.
       - uses: actions/upload-artifact@v4
         with:
           name: projected-releases
-          path: |
-            projected-releases.md
-            pr-number.txt
+          path: projected-releases.md
