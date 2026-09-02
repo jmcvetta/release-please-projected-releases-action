@@ -89,6 +89,14 @@ projecting the wrong thing — including the narrower case where a repository
 squashes but is set to `COMMIT_OR_PR_TITLE`, which takes the subject from the
 branch's only commit when the branch has one.
 
+**Manifest mode.** It reads `release-please-config.json` and
+`.release-please-manifest.json` from the checkout, so a repository using
+release-please's plain mode — `release-type:` on the action, with no config or
+manifest on disk — has nothing for it to read. That is not a deep limitation,
+just an unimplemented one: the same projection would work from the action
+inputs release-please itself takes. This repository releases that way, which
+is why it does not run this action on its own pull requests.
+
 **Nothing else.** Components, tag separators, `changelog-sections`, aggregated
 or separate release pull requests, prerelease versions, `Release-As` — all of
 that is release-please's own behaviour, reached through release-please.
@@ -195,6 +203,27 @@ rules in another language, and two were mirrored **backwards** — hidden types
 were believed to release, and a miscased type was believed to fail outright.
 Reading the source produced both errors; running it produced both corrections.
 So the tests measure behaviour rather than restate source.
+
+## Releasing
+
+release-please, in its plain single-package mode: `.github/workflows/release-please.yml`
+passes `release-type: node` and there is no `release-please-config.json` or
+`.release-please-manifest.json` here. One package, one version, in
+`package.json`. It keeps a standing release pull request; merging it writes
+`CHANGELOG.md`, bumps the version, and cuts the tag.
+
+The workflow then moves `v1` and `v1.<minor>` onto that tag, because an action
+is pinned by its major and release-please writes only the exact version.
+
+The bundle is deliberately identical across a version bump — the banner names
+the release-please it wraps and nothing about this package — so the release
+pull request does not trip CI's staleness check on the one merge that cuts a
+tag. `src/packaging.test.ts` keeps it that way.
+
+The release pull request is opened with the default `GITHUB_TOKEN` unless the
+repository sets `RELEASE_BOT_APP_ID` and `RELEASE_BOT_PRIVATE_KEY`. GitHub
+suppresses workflow events for anything the default token pushes, so without
+the App that one pull request arrives with no checks on it.
 
 ## History
 
