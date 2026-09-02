@@ -12261,10 +12261,10 @@ var require_util3 = __commonJS({
         return strOrArr;
       }
     }
-    function getCommitGroups(groupBy, commits, groupsSort, commitsSort) {
+    function getCommitGroups(groupBy2, commits, groupsSort, commitsSort) {
       const commitGroups = [];
       const commitGroupsObj = commits.reduce(function(groups, commit) {
-        const key = commit[groupBy] || "";
+        const key = commit[groupBy2] || "";
         if (groups[key]) {
           groups[key].push(commit);
         } else {
@@ -61934,18 +61934,20 @@ function render(projection, options) {
   return [...lines, "", footer(options)].join("\n") + "\n";
 }
 function renderProjection(projection, options) {
-  const byComponent = new Map(
-    projection.packages.map((p) => [p.releaseComponent, p])
-  );
   const touchedPackages = [...projection.touched.keys()].flatMap((path) => {
     const pkg = projection.packages.find((p) => p.path === path);
     return pkg ? [pkg] : [];
   });
   const touched = new Set(touchedPackages.map((p) => p.releaseComponent));
-  const pendingBy = new Map(projection.pending.map((r) => [r.component, r]));
+  const byComponent = groupBy(projection.packages, (p) => p.releaseComponent);
+  const shared = new Set(
+    [...byComponent].filter(([, list]) => list.length > 1).map(([c]) => c)
+  );
+  const unclaimed = claimOrder(byComponent, new Set(projection.touched.keys()));
+  const pendingBy = groupBy(projection.pending, (r) => r.component);
   const rows = projection.projected.filter((r) => touched.has(r.component)).flatMap((projected) => {
-    const pkg = byComponent.get(projected.component);
-    return pkg ? [{ pkg, projected, pending: pendingBy.get(projected.component) }] : [];
+    const pkg = unclaimed.get(projected.component)?.shift();
+    return pkg ? [{ pkg, projected, pending: pendingBy.get(projected.component)?.shift() }] : [];
   });
   const moved = rows.filter((r) => r.pending?.version !== r.projected.version);
   const unmoved = rows.filter((r) => r.pending?.version === r.projected.version);
@@ -61969,10 +61971,36 @@ function renderProjection(projection, options) {
   if (unmoved.length > 0) {
     out.push("", ...unmoved.map((row) => unmovedNote(row, options)));
   }
-  const warnings = warn(projection, options, moved, unmoved);
+  const warnings = warn(projection, options, moved, unmoved, {
+    shared: byComponent,
+    named: new Set(
+      [...moved, ...unmoved].map((r) => r.pkg.releaseComponent).filter((c) => shared.has(c))
+    )
+  });
   if (warnings.length > 0) out.push("", ...warnings);
   if (moved.length > 0) out.push("", changelog(moved));
   out.push("", components(projection));
+  return out;
+}
+function groupBy(values, key) {
+  const out = /* @__PURE__ */ new Map();
+  for (const value of values) {
+    const list = out.get(key(value));
+    if (list) list.push(value);
+    else out.set(key(value), [value]);
+  }
+  return out;
+}
+function claimOrder(byComponent, touchedPaths) {
+  const out = /* @__PURE__ */ new Map();
+  for (const [component, list] of byComponent) {
+    out.set(
+      component,
+      [...list].sort(
+        (a, b) => Number(touchedPaths.has(b.path)) - Number(touchedPaths.has(a.path))
+      )
+    );
+  }
   return out;
 }
 function none(projection, options, touched) {
@@ -62032,8 +62060,14 @@ function unmovedNote(row, options) {
   const what = visibleTitle(options) ? " this PR adds a changelog line to it, not a version." : " this PR does not move it.";
   return `- \`${row.pkg.component}\` stays at ${where}, already pending;${what}`;
 }
-function warn(projection, options, moved, unmoved) {
+function warn(projection, options, moved, unmoved, components2) {
   const warnings = [...options.advisories ?? []];
+  for (const component of [...components2.named].sort()) {
+    const paths = (components2.shared.get(component) ?? []).map((p) => `\`${p.path}\``).join(", ");
+    warnings.push(
+      `- ${paths} release under one component name, so a row's **Current** and matched files may belong to either. Give each package its own \`component\`.`
+    );
+  }
   if (projection.ignoredReleaseAs) {
     warnings.push(
       `- \`Release-As: ${projection.ignoredReleaseAs}\` was **ignored** \u2014 release-please returned a different version. A note only counts when it parses as a git trailer, so no non-trailer text may follow it: a \`---\` rule or an attribution line below it voids it silently. Check the merge box too, which is prefilled from the description but editable.`
