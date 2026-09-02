@@ -6,6 +6,36 @@ for the things that are easy to get wrong twice.
 
 ---
 
+## Writing a pull request description
+
+**The description becomes the squash commit body and stays in the history
+forever. Write it as a commit message for a public project.**
+
+A reader wants a summary of what the change is and why. A few short
+paragraphs, in the register an engineer would use writing to strangers.
+
+Not in it:
+
+- a diary of how the work went, or what was tried and abandoned;
+- alternatives considered and rejected;
+- measurement tables, benchmark output, tool version numbers;
+- implementation trivia and internal file paths;
+- what was learned along the way.
+
+Those belong in the individual commit messages, in this file, in an issue, or
+nowhere. They are not review material and they are certainly not commit-log
+material.
+
+Corrected 2026-09-02: this repository's own #1 reached about eighty-five lines
+before someone read it — session narrative, rejected approaches, a table of
+five failed attempts at a trailer, and a running account of bugs found that
+day. All of it true, none of it a description of the change. Length is the
+symptom; the cause is writing to record the work rather than to inform a
+reader.
+
+The same goes for the repository's public surface generally: it is a FOSS
+project, and the audience is people who have never seen this conversation.
+
 ## Editing a pull request body: use the MCP tool, never `curl PATCH`
 
 **Writing a PR body with `curl -X PATCH` from a Claude Code session appends an
