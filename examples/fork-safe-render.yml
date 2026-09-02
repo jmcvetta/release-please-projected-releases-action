@@ -1,0 +1,35 @@
+# The rendering half of the fork-safe arrangement. See
+# examples/fork-safe-comment.yml for the other half and the reasoning.
+#
+# Copy to .github/workflows/projected-releases.yml.
+name: Projected releases
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+
+# Read-only, which is all a pull request from a fork gets anyway. This job
+# renders and posts nothing.
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.event.pull_request.head.ref, 'release-please--') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: jmcvetta/release-please-projected-releases-action@v1
+        with:
+          mode: render
+      # The number travels with the body: a `workflow_run` payload names the
+      # run, not the pull request that caused it.
+      - run: echo "${{ github.event.pull_request.number }}" > pr-number.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: projected-releases
+          path: |
+            projected-releases.md
+            pr-number.txt

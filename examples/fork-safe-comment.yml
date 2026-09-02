@@ -1,0 +1,51 @@
+# The posting half of the fork-safe arrangement.
+#
+# A `pull_request` event from a fork gets a read-only GITHUB_TOKEN, so the
+# comment cannot be posted from that job at all -- the action says so and
+# leaves the projection in the job summary. A `workflow_run` companion runs
+# from the base repository's default branch, with its own permissions, after
+# the pull request job finishes, and posts what that job rendered.
+#
+# Deliberately NOT `pull_request_target`, which would run the head's code with
+# a write token. Nothing here executes anything from the fork: the other
+# workflow checks the pull request out without building it, and this one only
+# downloads a rendered markdown file.
+#
+# Copy to .github/workflows/projected-releases-comment.yml.
+name: Projected releases (comment)
+
+on:
+  workflow_run:
+    # Must match the `name:` of examples/fork-safe-render.yml as installed.
+    workflows: [Projected releases]
+    types: [completed]
+
+permissions:
+  # Download the artifact from the run that triggered this one.
+  actions: read
+  # The sticky comment, and nothing else.
+  pull-requests: write
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'pull_request'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: projected-releases
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      # Checked rather than trusted. This job holds a write token and the file
+      # came out of a run an outside contributor triggered, so the number is
+      # read from the file rather than interpolated, and reduced to digits
+      # before it reaches a step output.
+      - id: pr
+        run: |
+          number=$(tr -dc '0-9' < pr-number.txt | head -c 12)
+          [[ -n "$number" ]] || { echo "::error::no pull request number" >&2; exit 1; }
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+      - uses: jmcvetta/release-please-projected-releases-action@v1
+        with:
+          mode: comment
+          number: ${{ steps.pr.outputs.number }}

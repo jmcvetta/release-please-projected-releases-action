@@ -1,0 +1,50 @@
+# The ordinary arrangement: one job, one step.
+#
+# Copy this to .github/workflows/projected-releases.yml in a repository that
+# release-please releases, and adjust the pin.
+name: Projected releases
+
+on:
+  pull_request:
+    # `edited` is the load-bearing one: the projection comes from the title,
+    # so a title fixed after review has to re-render. `synchronize` covers a
+    # push changing which components the diff touches, and `edited` also fires
+    # on a body edit, which can add or void a `Release-As` footer.
+    types: [opened, reopened, synchronize, edited]
+
+permissions:
+  contents: read
+
+# A title edit and a push land close together often enough to race the sticky
+# comment. Superseding the older run keeps the last-written comment the one
+# describing the current head.
+concurrency:
+  group: projected-releases-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    # Not on release-please's own release pull requests, where the projection
+    # is not merely uninteresting but wrong. Merging one cuts a tag
+    # unconditionally: release-please reads the changelog and manifest already
+    # written into the branch, never the type in the title. This action models
+    # the other path -- a squashed title becoming a commit release-please
+    # parses -- so on `chore(main): release ...` it would faithfully report
+    # "nothing releases" about the one merge that always releases something.
+    if: ${{ !startsWith(github.event.pull_request.head.ref, 'release-please--') }}
+    permissions:
+      # release-please reads commits, tags, releases and its own config. All
+      # reads: the default token is enough, and no App identity is needed,
+      # because nothing is pushed.
+      contents: read
+      # The sticky comment, and nothing else.
+      pull-requests: write
+    steps:
+      # Full history, so the changed-file diff can run from the merge base. A
+      # shallow clone does not have that commit; the action falls back to the
+      # API, which is capped at 3000 files.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: jmcvetta/release-please-projected-releases-action@v1

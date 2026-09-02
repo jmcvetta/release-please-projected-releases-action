@@ -1,0 +1,19 @@
+# release-please is the dependency that matters here, and its upgrade is the
+# one this action is built to be loud about: it wraps `mergeCommitIterator`,
+# and a version that moves that seam would otherwise degrade into a preview
+# reporting that nothing releases -- which is also the most common true
+# answer. `assertConsulted` in src/pr-view.ts turns that into a failure on the
+# bump pull request, where someone is already looking.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      dev:
+        dependency-type: development
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -1,6 +1,6 @@
 {
-  "note": "Shared between the TypeScript action (src/conventional.ts) and tests/test_infra_github.py, which pins this repository's PR-title gate to the same list. One copy, read by both languages, because both fail quietly when they drift: too strict red-lights a title that would have released correctly, too loose lets a commit onto master that the changelog silently omits.",
-  "source": "The default `types` of conventional-changelog-conventionalcommits, which is what release-please writes notes with while this repository sets no `changelog-sections`.",
+  "note": "The fallback commit-type list, used when a repository's release-please-config.json declares no `changelog-sections` and the caller sets no `visible-types`/`hidden-types`. A data file rather than a TypeScript constant so a caller in another language can read the same list -- pinning a PR-title gate to it, say -- though the action's `recognized-types` output is the better source, since it reports what a run actually resolved.",
+  "source": "The default `types` of conventional-changelog-conventionalcommits, which is what release-please writes notes with when a config declares no `changelog-sections`.",
   "visible": ["feat", "feature", "fix", "perf", "revert"],
   "hidden": ["docs", "style", "chore", "refactor", "test", "build", "ci"],
   "releaseBranchPrefix": "release-please--"

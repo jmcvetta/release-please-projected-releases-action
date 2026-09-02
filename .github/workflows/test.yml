@@ -1,0 +1,67 @@
+# Typecheck, test, and prove the committed bundle is the source.
+#
+# The last of those is the one a JavaScript action needs and a library does
+# not. `dist/index.mjs` is what callers actually run, so a pull request that
+# changes src/ without rebuilding ships nothing: the tests pass, review passes,
+# and the action keeps running the old code. Rebuilding here and failing on a
+# diff makes that impossible to merge by accident.
+name: Test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Rebuild the bundle
+        run: npm run build
+      - name: Fail if the committed bundle is not the source
+        run: |
+          if ! git diff --quiet -- dist; then
+            echo "::error::dist/index.mjs is stale. Run \`npm run build\` and commit it." >&2
+            git diff --stat -- dist >&2
+            exit 1
+          fi
+
+      # The bundle is where this action fails in the way nothing else catches.
+      # esbuild leaves the CommonJS `require` calls it cannot resolve to a stub
+      # that throws, and release-please's logger reaches one on load, so a
+      # broken bundle dies before any of it runs. Every unit test above passes
+      # against src/, which does not exercise the bundle at all.
+      #
+      # Running it with no inputs reaches the first thing it checks, which
+      # means the whole module graph loaded.
+      - name: Prove the bundle loads
+        run: |
+          set +e
+          output=$(node dist/index.mjs 2>&1)
+          status=$?
+          set -e
+          echo "$output"
+          if [[ $status -eq 0 ]]; then
+            echo "::error::the bundle should have failed on a missing repository" >&2
+            exit 1
+          fi
+          if ! grep -q "could not determine the repository" <<<"$output"; then
+            echo "::error::the bundle did not reach its own input checks" >&2
+            exit 1
+          fi

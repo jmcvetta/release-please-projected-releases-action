@@ -15,7 +15,7 @@
   "dependencies": {
     "release-please": "17.11.2"
   },
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "author": "Jason McVetta",
   "repository": {
     "type": "git",

@@ -62454,3 +62454,8 @@ var argv = process.argv.slice(2);
   }
   process.exitCode = 1;
 });
+/*! Bundled license information:
+
+he/he.js:
+  (*! https://mths.be/he v1.2.0 by @mathias | MIT license *)
+*/
