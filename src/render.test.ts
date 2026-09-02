@@ -459,3 +459,38 @@ describe("a release whose component matches no configured package", () => {
     expect(out).toContain("a component this comment cannot name");
   });
 });
+
+// The line under the Components listing states the rule that produced it,
+// and there are two rules. `splitFiles` skips a file with no `/` when
+// matching prefixes, but hands a package rooted at `.` every file there is --
+// so the root case needs the other sentence. Printed unconditionally, the
+// wrong one appeared on every comment this action posts on its own
+// repository, which releases in plain mode from `.`.
+describe("the rule printed under the components listing", () => {
+  const ROOT: PackageConfig = {
+    path: ".",
+    component: "widgets",
+    releaseComponent: "",
+    current: "2.4.1",
+    separator: "-",
+    includeComponent: false,
+  };
+
+  it("says a root file matches nothing when no package is rooted", () => {
+    expect(body(projection())).toContain(
+      "Longest path wins; a repository-root file matches nothing.",
+    );
+  });
+
+  it("says the root package takes every file when one is", () => {
+    const out = body(
+      projection({
+        packages: [ROOT],
+        touched: new Map([[".", ["README.md"]]]),
+        files: ["README.md"],
+      }),
+    );
+    expect(out).toContain("`.` takes every file besides.");
+    expect(out).not.toContain("matches nothing");
+  });
+});

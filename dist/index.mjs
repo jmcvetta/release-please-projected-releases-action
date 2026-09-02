@@ -62222,9 +62222,10 @@ function components(projection) {
       lines.push(`- \u2026and ${files.length - shown.length} more`);
     }
   }
+  const rooted = projection.packages.some((p) => p.path === ROOT_PACKAGE_PATH);
   lines.push(
     "",
-    "Longest path wins; a repository-root file matches nothing.",
+    rooted ? `Longest path wins; \`${ROOT_PACKAGE_PATH}\` takes every file besides.` : "Longest path wins; a repository-root file matches nothing.",
     "",
     "</details>"
   );

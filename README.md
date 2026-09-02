@@ -18,7 +18,7 @@ if that matters to you.
 ```
 ## Projected releases
 
-| Component | Tag | Current | Pending | Projected |
+| Component | Tag | Current | Without this PR | Projected |
 | --- | --- | --- | --- | --- |
 | `acme-api` | `acme-api@v2.5.0` | 2.4.1 | 2.4.2 | **2.5.0** |
 
@@ -239,8 +239,10 @@ passes `release-type: node` and there is no `release-please-config.json` or
 `package.json`. It keeps a standing release pull request; merging it writes
 `CHANGELOG.md`, bumps the version, and cuts the tag.
 
-The workflow then moves `v1` and `v1.<minor>` onto that tag, because an action
-is pinned by its major and release-please writes only the exact version.
+The workflow then moves `v<major>` and `v<major>.<minor>` onto that tag,
+because an action is pinned by its major and release-please writes only the
+exact version. Pre-1.0 that means `v0` and `v0.<minor>`, which is what the
+examples above pin.
 
 The bundle is deliberately identical across a version bump — the banner names
 the release-please it wraps and nothing about this package — so the release

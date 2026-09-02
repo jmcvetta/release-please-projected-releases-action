@@ -11,6 +11,7 @@ import { DEFAULT_TYPES, titleType } from "./conventional.js";
 import type { TypeSet } from "./conventional.js";
 import type { PackageConfig, Projection, Release } from "./project.js";
 import { tagFor } from "./project.js";
+import { ROOT_PACKAGE_PATH } from "./split.js";
 
 /** RenderOptions are the pull request facts the body is stamped with. */
 export interface RenderOptions {
@@ -563,9 +564,17 @@ function components(projection: Projection): string {
       lines.push(`- …and ${files.length - shown.length} more`);
     }
   }
+  // Which of the two rules applies depends on whether a package is rooted at
+  // the repository. `splitFiles` hands a root package every file, so printing
+  // "a repository-root file matches nothing" there contradicted the very
+  // listing above it -- as it did on every comment this action posted on its
+  // own repository, which releases in plain mode from `.`.
+  const rooted = projection.packages.some((p) => p.path === ROOT_PACKAGE_PATH);
   lines.push(
     "",
-    "Longest path wins; a repository-root file matches nothing.",
+    rooted
+      ? `Longest path wins; \`${ROOT_PACKAGE_PATH}\` takes every file besides.`
+      : "Longest path wins; a repository-root file matches nothing.",
     "",
     "</details>",
   );

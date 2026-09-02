@@ -7,9 +7,16 @@
 # version lives in package.json, which the node releaser bumps along with the
 # lockfile and CHANGELOG.md.
 #
-# The first release is 1.0.0. With no prior tag release-please uses its
-# initial version rather than bumping package.json's 0.0.0, which is what an
-# action wants: consumers pin `@v1`.
+# The first release is 0.1.0, set by a `Release-As: 0.1.0` trailer on the
+# pull request that introduces this workflow. Left alone release-please would
+# have used its initial version of 1.0.0, since with no prior tag it takes
+# that from the strategy rather than bumping package.json's 0.0.0 -- and
+# `initial-version` is a config-file key that release-please-action exposes no
+# input for, so in plain mode the trailer is the way to reach it. Consumers
+# pin `@v0` until this repository is ready to say 1.0.0 and mean it.
+#
+# The trailer counts only as the last paragraph of the commit message, and
+# the squash commit's body is the pull request description. See CLAUDE.md.
 name: Release Please
 
 on:
@@ -57,9 +64,10 @@ jobs:
           release-type: node
           token: ${{ steps.app-token.outputs.token || github.token }}
 
-      # An action is pinned by its major tag, so `v1` has to move onto each
-      # release for `uses: ...@v1` to mean anything. release-please writes
-      # only the exact tag.
+      # An action is pinned by its major tag, so `v0` has to move onto each
+      # release for `uses: ...@v0` to mean anything. release-please writes
+      # only the exact tag. The aliases below are computed from the release,
+      # so this keeps working across the 1.0.0 that retires `v0`.
       - uses: actions/checkout@v5
         if: steps.release.outputs.release_created == 'true'
         with:
