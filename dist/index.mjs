@@ -61674,7 +61674,7 @@ var SeamError = class extends Error {
     this.name = "SeamError";
   }
 };
-function viewWithPullRequest(base, commit, overrides = {}) {
+function viewWithPullRequest(base, commit, overrides = {}, readHeadFile) {
   if (typeof base.mergeCommitIterator !== "function") {
     throw new SeamError(
       "release-please's GitHub has no mergeCommitIterator; the seam this preview wraps has moved. See src/pr-view.ts."
@@ -61711,6 +61711,20 @@ ${commit.body.trim()}` : commit.title;
     view.getFileJson = async function(path, branch2) {
       if (Object.hasOwn(overrides, path)) return overrides[path];
       return base.getFileJson(path, branch2);
+    };
+  }
+  if (readHeadFile) {
+    view.getFileContentsOnBranch = async function(path, branch2) {
+      const content = readHeadFile(path);
+      if (content === void 0) {
+        return base.getFileContentsOnBranch(path, branch2);
+      }
+      return {
+        sha: "",
+        mode: "100644",
+        content: Buffer.from(content, "utf8").toString("base64"),
+        parsedContent: content
+      };
     };
   }
   return {
@@ -61870,7 +61884,8 @@ async function project(options) {
   const view = viewWithPullRequest(
     options.github,
     options.commit,
-    overrides
+    overrides,
+    options.readHeadFile
   );
   const withPr = await build(view.github);
   const prefix = options.releaseBranchPrefix;
@@ -61880,8 +61895,15 @@ async function project(options) {
     withPr,
     await namePackages(withPr, declared)
   );
-  const withoutPr = await build(options.github);
-  const pending = toReleases(await withoutPr.buildPullRequests(), prefix);
+  let pending = [];
+  try {
+    const withoutPr = await build(options.github);
+    pending = toReleases(await withoutPr.buildPullRequests(), prefix);
+  } catch (error) {
+    console.error(
+      `could not build releases for the target branch, so nothing is pending there: ${String(error)}`
+    );
+  }
   const touched = splitFiles(
     options.commit.files,
     packages.map((p) => p.path)
@@ -61926,7 +61948,7 @@ function loadReleasePrs(text, prefix = DEFAULT_TYPES.releaseBranchPrefix) {
 
 // src/run.ts
 var import_release_please2 = __toESM(require_src2(), 1);
-import { readFileSync as readFileSync2 } from "node:fs";
+import { existsSync, readFileSync as readFileSync2 } from "node:fs";
 import { resolve } from "node:path";
 
 // src/render.ts
@@ -62244,6 +62266,15 @@ async function projectPullRequest(options, config, manifest, files) {
     configFile: files.configFile,
     manifestFile: files.manifestFile,
     releaseBranchPrefix: files.releaseBranchPrefix,
+    // Serve the head's copy of any file the pull request changes. release-please
+    // reads the package file from the target branch to name the component, and a
+    // pull request that adds it -- adopting release-please -- has a target branch
+    // without it. After the merge, the head's copy is the one that branch has.
+    readHeadFile: (path) => {
+      if (!options.files.includes(path)) return void 0;
+      const full = resolve(options.repoRoot ?? ".", path);
+      return existsSync(full) ? readFileSync2(full, "utf8") : void 0;
+    },
     ...options.plain ? { plain: options.plain } : {},
     commit: {
       title: options.title,

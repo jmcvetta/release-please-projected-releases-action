@@ -22,7 +22,7 @@ import type {
 } from "release-please";
 import { componentOfBranch } from "./conventional.js";
 import { ROOT_PACKAGE_PATH, splitFiles } from "./split.js";
-import type { HeadOverrides, SyntheticCommit } from "./pr-view.js";
+import type { HeadOverrides, ReadHeadFile, SyntheticCommit } from "./pr-view.js";
 import { viewWithPullRequest } from "./pr-view.js";
 
 /** DEFAULT_CONFIG_FILE is release-please's config path. */
@@ -328,6 +328,9 @@ export interface ProjectOptions {
   /** releaseBranchPrefix is how release-please names its release branches,
    * which is how a candidate release is attributed to a component. */
   releaseBranchPrefix?: string;
+  /** readHeadFile serves the pull request's version of a file release-please
+   * reads from the target branch. See ReadHeadFile in pr-view.ts. */
+  readHeadFile?: ReadHeadFile;
 }
 
 // A `Release-As:` note on a line of its own. The key is matched
@@ -428,9 +431,10 @@ export async function project(options: ProjectOptions): Promise<Projection> {
     ? [plainPackage(plain)]
     : readPackages(options.config, options.manifest);
 
-  // Plain mode reads no files, so there is nothing to serve from the head:
-  // the configuration came from the caller, and a branch cannot change it the
-  // way it can change a checked-in release-please-config.json.
+  // Plain mode has no config or manifest file to override -- the
+  // configuration came from the caller. It still reads a file, though: the
+  // release strategy opens the package file on the target branch to derive
+  // the component name, which `readHeadFile` serves from the head.
   const overrides: HeadOverrides = plain
     ? {}
     : {
@@ -460,6 +464,7 @@ export async function project(options: ProjectOptions): Promise<Projection> {
     options.github,
     options.commit,
     overrides,
+    options.readHeadFile,
   );
   const withPr = await build(view.github);
   const prefix = options.releaseBranchPrefix;
@@ -473,8 +478,22 @@ export async function project(options: ProjectOptions): Promise<Projection> {
     await namePackages(withPr, declared),
   );
 
-  const withoutPr = await build(options.github);
-  const pending = toReleases(await withoutPr.buildPullRequests(), prefix);
+  // The target branch may not be configured for release-please at all: a pull
+  // request that introduces it, or introduces the package file its strategy
+  // reads, has a base where `fromConfig` cannot build a manifest. That is not
+  // an error and it is not unknown -- a branch release-please cannot run on
+  // releases nothing, which is what an empty `pending` says. Adopting
+  // release-please is exactly this shape, so it must not fail the run.
+  let pending: Release[] = [];
+  try {
+    const withoutPr = await build(options.github);
+    pending = toReleases(await withoutPr.buildPullRequests(), prefix);
+  } catch (error) {
+    console.error(
+      "could not build releases for the target branch, so nothing is" +
+        ` pending there: ${String(error)}`,
+    );
+  }
 
   const touched = splitFiles(
     options.commit.files,

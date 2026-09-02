@@ -8,7 +8,7 @@
  * how a projection gets compared against the merge that follows it.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { GitHub, setLogger } from "release-please";
 import type { GitHub as GitHubType } from "release-please";
@@ -234,6 +234,15 @@ async function projectPullRequest(
     configFile: files.configFile,
     manifestFile: files.manifestFile,
     releaseBranchPrefix: files.releaseBranchPrefix,
+    // Serve the head's copy of any file the pull request changes. release-please
+    // reads the package file from the target branch to name the component, and a
+    // pull request that adds it -- adopting release-please -- has a target branch
+    // without it. After the merge, the head's copy is the one that branch has.
+    readHeadFile: (path: string) => {
+      if (!options.files.includes(path)) return undefined;
+      const full = resolve(options.repoRoot ?? ".", path);
+      return existsSync(full) ? readFileSync(full, "utf8") : undefined;
+    },
     ...(options.plain ? { plain: options.plain } : {}),
     commit: {
       title: options.title,

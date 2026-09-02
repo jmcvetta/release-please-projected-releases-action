@@ -624,3 +624,67 @@ describe("a repository release-please runs without a manifest", () => {
     expect(p.projected.map((r) => r.version)).toEqual(["9.9.9"]);
   });
 });
+
+describe("a pull request that introduces release-please itself", () => {
+  // The shape that broke this action on its own repository: PR #1's base was
+  // an empty `master`, and `release-type: node` reads `package.json` from the
+  // target branch to derive the component name. It is not there yet -- that
+  // pull request is the one adding it -- so `Manifest.fromConfig` threw
+  // `_MissingRequiredFileError` and the job went red.
+  //
+  // Adopting release-please always has this shape, so it has to work: serve
+  // the head's copy of the files the pull request changes, exactly as the
+  // config and manifest are already served in manifest mode.
+  const PKG = JSON.stringify({ name: "widgets", version: "0.0.0" });
+
+  /** bare is a repository whose target branch has no package.json at all. */
+  function bare() {
+    return fakeScm({ config: {}, manifest: {}, releases: [], files: {} });
+  }
+
+  async function project1(readHeadFile?: (p: string) => string | undefined) {
+    return project({
+      github: bare(),
+      config: {},
+      manifest: {},
+      plain: { releaseType: "node" as const },
+      ...(readHeadFile ? { readHeadFile } : {}),
+      commit: {
+        title: "feat: extract the tool as a standalone action",
+        body: "",
+        files: ["package.json", "src/a.ts"],
+        number: 1,
+        headSha: "abcdef1234567890",
+        headBranch: "topic",
+        baseBranch: "master",
+      },
+    });
+  }
+
+  it("fails without the head's package.json, which is the bug", async () => {
+    await expect(project1()).rejects.toThrow(/package\.json/);
+  });
+
+  it("projects the release once the head's package.json is served", async () => {
+    const p = await project1((path) => (path === "package.json" ? PKG : undefined));
+    expect(p.projected.map((r) => r.version)).toEqual(["1.0.0"]);
+    expect(p.packages[0]?.component).toBe("widgets");
+  });
+
+  it("reports nothing pending, since the target branch cannot release", async () => {
+    // The second pass runs against the target branch as it stands, where
+    // release-please cannot build a manifest at all. That is not an error and
+    // not unknown: a branch it cannot run on releases nothing.
+    const p = await project1((path) => (path === "package.json" ? PKG : undefined));
+    expect(p.pending).toEqual([]);
+  });
+
+  it("serves the head copy only for files the pull request changes", async () => {
+    const seen: string[] = [];
+    await project1((path) => {
+      seen.push(path);
+      return path === "package.json" ? PKG : undefined;
+    });
+    expect(seen).toContain("package.json");
+  });
+});

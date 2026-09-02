@@ -91,6 +91,21 @@ export interface HeadOverrides {
 }
 
 /**
+ * ReadHeadFile returns the pull request's version of a file, or undefined
+ * when the pull request does not change it.
+ *
+ * release-please reads more than its own config from the target branch: a
+ * release strategy reads the package file too — `release-type: node` opens
+ * `package.json` to derive the component name. A pull request that *adds*
+ * that file, which is what adopting release-please looks like, therefore
+ * cannot be projected from the target branch alone: the file is not there
+ * yet. Serving the head's copy is the same rule already applied to the config
+ * and manifest, for the same reason — after the merge, that is the copy the
+ * target branch has.
+ */
+export type ReadHeadFile = (path: string) => string | undefined;
+
+/**
  * viewWithPullRequest wraps a real `GitHub` so release-please sees the
  * squash-merge of this pull request as the newest commit on the target
  * branch.
@@ -104,6 +119,7 @@ export function viewWithPullRequest(
   base: GitHub,
   commit: SyntheticCommit,
   overrides: HeadOverrides = {},
+  readHeadFile?: ReadHeadFile,
 ): PullRequestView {
   if (typeof base.mergeCommitIterator !== "function") {
     throw new SeamError(
@@ -159,6 +175,27 @@ export function viewWithPullRequest(
       if (Object.hasOwn(overrides, path)) return overrides[path] as T;
       return base.getFileJson<T>(path, branch);
     } as GitHub["getFileJson"];
+  }
+
+  if (readHeadFile) {
+    view.getFileContentsOnBranch = async function (
+      path: string,
+      branch: string,
+    ): Promise<unknown> {
+      const content = readHeadFile(path);
+      if (content === undefined) {
+        return base.getFileContentsOnBranch(path, branch);
+      }
+      // The shape release-please's file cache returns. `parsedContent` is what
+      // the strategies actually read; the rest is carried for callers that
+      // inspect it.
+      return {
+        sha: "",
+        mode: "100644",
+        content: Buffer.from(content, "utf8").toString("base64"),
+        parsedContent: content,
+      };
+    } as GitHub["getFileContentsOnBranch"];
   }
 
   return {
