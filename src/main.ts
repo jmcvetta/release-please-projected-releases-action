@@ -1,35 +1,26 @@
 /**
- * main renders the projected-releases comment for one pull request.
+ * main is the command line entry point: render the projected-releases comment
+ * for one pull request and write it to a file or standard output.
  *
- * Inputs arrive as flags rather than environment variables so the tool can be
- * driven by hand from a checkout, which is how it is compared against a real
- * merge. The action passes the pull request title and body through the
- * environment and into `--title` / `--body-file`, never through workflow
- * interpolation: a title is attacker-controlled text, and `${{ }}` in a shell
- * line would run it.
+ * It exists so the tool can be driven by hand from a checkout, which is how a
+ * projection gets compared against the merge that follows it, and how a
+ * change to the rendering is reviewed without pushing a pull request to look
+ * at. The action entry point (src/action.ts) reads the same options from the
+ * runner instead.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { resolve } from "node:path";
-import { GitHub, setLogger } from "release-please";
-import { isMalformed } from "./conventional.js";
 import { changedFiles } from "./git.js";
-import { project, DEFAULT_CONFIG_FILE, DEFAULT_MANIFEST_FILE } from "./project.js";
-import type { Projection } from "./project.js";
+import { DEFAULT_CONFIG_FILE, DEFAULT_MANIFEST_FILE } from "./project.js";
 import { loadReleasePrs } from "./release-prs.js";
-import { render } from "./render.js";
+import { buildComment, quietLogger } from "./run.js";
 
-/** EMPTY is the projection rendered when the title is withheld from one. */
-const EMPTY: Projection = {
-  packages: [],
-  touched: new Map(),
-  files: [],
-  projected: [],
-  pending: [],
-};
-
-async function main(argv: string[]): Promise<number> {
+/**
+ * cli renders one projection from command line flags. Exported rather than
+ * run on import so the single bundled entry point can dispatch to it.
+ */
+export async function cli(argv: string[]): Promise<void> {
   const { values } = parseArgs({
     args: argv,
     options: {
@@ -40,7 +31,7 @@ async function main(argv: string[]): Promise<number> {
       // -file diff runs against is separate (`--diff-base`), because the two
       // are not the same string: release-please wants `master`, git wants
       // `origin/master`.
-      base: { type: "string", default: "master" },
+      base: { type: "string", default: "main" },
       "diff-base": { type: "string", default: "" },
       head: { type: "string", default: "HEAD" },
       "head-sha": { type: "string", default: "" },
@@ -51,6 +42,11 @@ async function main(argv: string[]): Promise<number> {
       "config-file": { type: "string", default: DEFAULT_CONFIG_FILE },
       "manifest-file": { type: "string", default: DEFAULT_MANIFEST_FILE },
       "release-prs": { type: "string" },
+      "release-branch-prefix": { type: "string" },
+      "visible-types": { type: "string" },
+      "hidden-types": { type: "string" },
+      "api-url": { type: "string" },
+      "graphql-url": { type: "string" },
       "run-url": { type: "string", default: "" },
       out: { type: "string" },
     },
@@ -64,95 +60,45 @@ async function main(argv: string[]): Promise<number> {
   }
   const [owner = "", name = ""] = repo.split("/");
 
-  // release-please logs to stdout by default, which would land in the middle
-  // of the comment body. Send it to stderr, where the Actions log still shows
-  // it and the comment stays clean.
-  const toStderr = (...args: unknown[]) => console.error(...args);
-  setLogger({
-    debug: toStderr,
-    info: toStderr,
-    warn: toStderr,
-    error: toStderr,
-    trace: toStderr,
-    fatal: toStderr,
-  } as Parameters<typeof setLogger>[0]);
+  quietLogger();
 
-  const root = values["repo-root"];
-  const body = values["body-file"]
-    ? readFileSync(values["body-file"], "utf8")
-    : "";
-  const releasePrs = values["release-prs"]
-    ? loadReleasePrs(readFileSync(values["release-prs"], "utf8"))
-    : new Map<string, string>();
+  const base = values.base;
+  const list = (value: string | undefined) =>
+    value ? value.split(/[\s,]+/).filter(Boolean) : undefined;
+  const visible = list(values["visible-types"]);
+  const hidden = list(values["hidden-types"]);
 
-  const options = {
+  const outcome = await buildComment({
+    owner,
+    repo: name,
+    token: values.token,
     title,
-    malformed: isMalformed(title),
-    releasePrs,
+    body: values["body-file"] ? readFileSync(values["body-file"], "utf8") : "",
+    number: Number(values.number) || 0,
+    base,
     headSha: values["head-sha"],
+    headBranch: values["head-branch"],
+    files: changedFiles(values["diff-base"] || `origin/${base}`, values.head),
+    repoRoot: values["repo-root"],
+    configFile: values["config-file"],
+    manifestFile: values["manifest-file"],
+    releasePrs: values["release-prs"]
+      ? loadReleasePrs(
+          readFileSync(values["release-prs"], "utf8"),
+          values["release-branch-prefix"],
+        )
+      : new Map<string, string>(),
     runUrl: values["run-url"],
-  };
-
-  // A malformed title is not mergeable as written, so the projection would
-  // describe a commit that will never exist. Nothing is worth fetching.
-  const projection = options.malformed
-    ? EMPTY
-    : await run(values, { owner, name, root, title, body });
-
-  const comment = render(projection, options);
-  if (values.out) writeFileSync(values.out, comment);
-  else process.stdout.write(comment);
-  return 0;
-}
-
-async function run(
-  values: Record<string, string | boolean | undefined>,
-  ctx: {
-    owner: string;
-    name: string;
-    root: string;
-    title: string;
-    body: string;
-  },
-): Promise<Projection> {
-  const base = String(values["base"]);
-  const configFile = String(values["config-file"]);
-  const manifestFile = String(values["manifest-file"]);
-  const readJson = (path: string) =>
-    JSON.parse(readFileSync(resolve(ctx.root, path), "utf8"));
-
-  const github = await GitHub.create({
-    owner: ctx.owner,
-    repo: ctx.name,
-    defaultBranch: base,
-    ...(values["token"] ? { token: String(values["token"]) } : {}),
+    ...(visible || hidden
+      ? { typeOverrides: { ...(visible ? { visible } : {}), ...(hidden ? { hidden } : {}) } }
+      : {}),
+    ...(values["release-branch-prefix"]
+      ? { releaseBranchPrefix: values["release-branch-prefix"] }
+      : {}),
+    ...(values["api-url"] ? { apiUrl: values["api-url"] } : {}),
+    ...(values["graphql-url"] ? { graphqlUrl: values["graphql-url"] } : {}),
   });
 
-  return project({
-    github,
-    config: readJson(configFile),
-    manifest: readJson(manifestFile),
-    configFile,
-    manifestFile,
-    commit: {
-      title: ctx.title,
-      body: ctx.body,
-      files: changedFiles(
-        String(values["diff-base"]) || `origin/${base}`,
-        String(values["head"]),
-      ),
-      number: Number(values["number"]) || 0,
-      headSha: String(values["head-sha"]) || "0".repeat(40),
-      headBranch: String(values["head-branch"]) || "HEAD",
-      baseBranch: base,
-    },
-  });
+  if (values.out) writeFileSync(values.out, outcome.body);
+  else process.stdout.write(outcome.body);
 }
-
-main(process.argv.slice(2)).then(
-  (code) => process.exit(code),
-  (error) => {
-    console.error(error instanceof Error ? error.stack : error);
-    process.exit(1);
-  },
-);

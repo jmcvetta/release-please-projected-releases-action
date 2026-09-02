@@ -1,0 +1,199 @@
+/**
+ * run is the whole job in one function, shared by the action and the CLI.
+ *
+ * Both entry points do the same thing and differ only in where the inputs
+ * come from: the action reads them from the runner and the webhook payload,
+ * the CLI from flags. Keeping the work here means driving the tool by hand
+ * from a checkout exercises the same code path a pull request does, which is
+ * how a projection gets compared against the merge that follows it.
+ */
+
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { GitHub, setLogger } from "release-please";
+import { isMalformed, resolveTypes } from "./conventional.js";
+import type { TypeSet } from "./conventional.js";
+import { project, DEFAULT_CONFIG_FILE, DEFAULT_MANIFEST_FILE } from "./project.js";
+import type { Projection } from "./project.js";
+import { render } from "./render.js";
+
+/** EMPTY is the projection rendered when the title is withheld from one. */
+const EMPTY: Projection = {
+  packages: [],
+  touched: new Map(),
+  files: [],
+  projected: [],
+  pending: [],
+};
+
+/** RunOptions are everything a projection needs, from either entry point. */
+export interface RunOptions {
+  owner: string;
+  repo: string;
+  token: string;
+  /** apiUrl is the REST root release-please reads through, for GitHub
+   * Enterprise Server. Undefined means github.com. */
+  apiUrl?: string | undefined;
+  /** graphqlUrl is the GraphQL endpoint, for GitHub Enterprise Server, where
+   * it is not derivable from the REST root. */
+  graphqlUrl?: string | undefined;
+  /** title is the pull request title, which squash-merge makes the subject. */
+  title: string;
+  /** body is the pull request description, which becomes the commit body. */
+  body: string;
+  /** number is the pull request number, so changelog lines can link to it. */
+  number: number;
+  /** base is the branch the pull request targets, by name. */
+  base: string;
+  /** headSha is the commit the projection describes. */
+  headSha: string;
+  /** headBranch is the pull request's head branch. */
+  headBranch: string;
+  /** files are the paths the pull request changes. */
+  files: string[];
+  /** repoRoot is the checkout the config and manifest are read from. */
+  repoRoot?: string;
+  configFile?: string;
+  manifestFile?: string;
+  /** releasePrs maps a component to its standing release pull request URL. */
+  releasePrs?: Map<string, string>;
+  /** runUrl is this workflow run, linked from the comment's footer. */
+  runUrl?: string;
+  /** typeOverrides force the changelog type list, when a caller knows better
+   * than the config does. */
+  typeOverrides?: { visible?: readonly string[]; hidden?: readonly string[] };
+  /** releaseBranchPrefix is how release-please names its release branches. */
+  releaseBranchPrefix?: string;
+  /** advisories are notes the caller found that the projection cannot see,
+   * chiefly about how the repository merges. */
+  advisories?: readonly string[];
+  /** now is the render time; injected so the footer is testable. */
+  now?: Date;
+}
+
+/** Outcome is the rendered comment plus what it was rendered from. */
+export interface Outcome {
+  /** body is the comment markdown. */
+  body: string;
+  /** projection is what release-please returned, empty when withheld. */
+  projection: Projection;
+  /** malformed reports that the projection was withheld. */
+  malformed: boolean;
+  /** types is the changelog type list this run resolved. */
+  types: TypeSet;
+}
+
+/**
+ * quietLogger sends release-please's logging to stderr.
+ *
+ * It logs to stdout by default, which for the CLI would land in the middle of
+ * the comment body it prints there. On a runner both streams reach the same
+ * log, so nothing is lost either way.
+ */
+export function quietLogger(): void {
+  const toStderr = (...args: unknown[]) => console.error(...args);
+  setLogger({
+    debug: toStderr,
+    info: toStderr,
+    warn: toStderr,
+    error: toStderr,
+    trace: toStderr,
+    fatal: toStderr,
+  } as Parameters<typeof setLogger>[0]);
+}
+
+/**
+ * buildComment renders the projected-releases comment for one pull request.
+ *
+ * A malformed title short-circuits the whole thing: such a title is not
+ * mergeable under a title gate and misleading without one, so a projection
+ * from it describes a commit that will never exist. Nothing is worth
+ * fetching.
+ */
+export async function buildComment(options: RunOptions): Promise<Outcome> {
+  const root = options.repoRoot ?? ".";
+  const configFile = options.configFile ?? DEFAULT_CONFIG_FILE;
+  const manifestFile = options.manifestFile ?? DEFAULT_MANIFEST_FILE;
+  const readJson = (path: string) =>
+    JSON.parse(readFileSync(resolve(root, path), "utf8")) as Record<
+      string,
+      unknown
+    >;
+
+  const config = readJson(configFile);
+  const manifest = readJson(manifestFile) as Record<string, string>;
+
+  const types = resolveTypes({
+    config,
+    ...(options.typeOverrides?.visible
+      ? { visible: options.typeOverrides.visible }
+      : {}),
+    ...(options.typeOverrides?.hidden
+      ? { hidden: options.typeOverrides.hidden }
+      : {}),
+    ...(options.releaseBranchPrefix
+      ? { releaseBranchPrefix: options.releaseBranchPrefix }
+      : {}),
+  });
+
+  const malformed = isMalformed(options.title, types);
+
+  const projection = malformed
+    ? EMPTY
+    : await projectPullRequest(options, config, manifest, {
+        configFile,
+        manifestFile,
+        releaseBranchPrefix: types.releaseBranchPrefix,
+      });
+
+  const body = render(projection, {
+    title: options.title,
+    malformed,
+    types,
+    ...(options.releasePrs ? { releasePrs: options.releasePrs } : {}),
+    ...(options.headSha ? { headSha: options.headSha } : {}),
+    ...(options.runUrl ? { runUrl: options.runUrl } : {}),
+    ...(options.advisories ? { advisories: options.advisories } : {}),
+    ...(options.now ? { now: options.now } : {}),
+  });
+
+  return { body, projection, malformed, types };
+}
+
+async function projectPullRequest(
+  options: RunOptions,
+  config: Record<string, unknown>,
+  manifest: Record<string, string>,
+  files: {
+    configFile: string;
+    manifestFile: string;
+    releaseBranchPrefix: string;
+  },
+): Promise<Projection> {
+  const github = await GitHub.create({
+    owner: options.owner,
+    repo: options.repo,
+    defaultBranch: options.base,
+    ...(options.token ? { token: options.token } : {}),
+    ...(options.apiUrl ? { apiUrl: options.apiUrl } : {}),
+    ...(options.graphqlUrl ? { graphqlUrl: options.graphqlUrl } : {}),
+  });
+
+  return project({
+    github,
+    config,
+    manifest,
+    configFile: files.configFile,
+    manifestFile: files.manifestFile,
+    releaseBranchPrefix: files.releaseBranchPrefix,
+    commit: {
+      title: options.title,
+      body: options.body,
+      files: options.files,
+      number: options.number,
+      headSha: options.headSha || "0".repeat(40),
+      headBranch: options.headBranch || "HEAD",
+      baseBranch: options.base,
+    },
+  });
+}

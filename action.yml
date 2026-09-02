@@ -1,44 +1,57 @@
-# Render the projected-releases comment body for one pull request.
+# Say on a pull request which release-please tags merging it will cut.
 #
-# The action renders; the caller posts. Keeping the two apart means the
-# sticky-comment implementation stays the caller's choice, and the rendered
-# body can also be written to a step summary or diffed in a test.
-#
-# This is a composite action rather than a JavaScript one for as long as it
-# lives inside the repository it serves. A JavaScript action needs a committed
-# `dist/index.js`, and bundling release-please drags octokit in behind it:
-# several megabytes of vendored JavaScript in a repository this tool is on its
-# way out of. `npm ci` costs a few seconds instead. Extraction flips it, and
-# changes only this file.
+# A bundled JavaScript action: `dist/index.mjs` is committed, so a caller pays
+# no install step and the version they pin is the code that runs. Rebuild it
+# with `npm run build`; CI fails a pull request whose bundle is stale.
 name: Projected releases
 description: >-
   Say which release-please tags merging a pull request will cut, from the
   Conventional Commit type in its title and the files it changes.
+author: Jason McVetta
+branding:
+  icon: tag
+  color: purple
 
 inputs:
+  token:
+    description: >-
+      Token for release-please's reads and for the comment. `contents: read`
+      and `pull-requests: write` are enough; the default GITHUB_TOKEN has both
+      on a pull request from a branch of this repository.
+    required: false
+    default: ${{ github.token }}
+  mode:
+    description: >-
+      `render-and-comment` (default) renders the projection and posts it as a
+      sticky comment. `render` only writes the file and the outputs, for a
+      job whose token cannot comment. `comment` posts a body an earlier job
+      rendered, and projects nothing — the two halves of the fork-safe
+      arrangement in the README.
+    required: false
+    default: render-and-comment
+
+  # Everything below defaults to the pull request in the webhook payload. They
+  # are inputs because a `workflow_run` companion job has no payload to read.
+  repository:
+    description: The repository, as owner/name. Defaults to the running one.
+    required: false
+    default: ""
+  number:
+    description: The pull request number.
+    required: false
+    default: ""
   title:
     description: The pull request title, which squash-merge makes the commit subject.
-    required: true
+    required: false
+    default: ""
   body:
     description: The pull request description, which becomes the commit body.
     required: false
     default: ""
-  repository:
-    description: The repository, as owner/name.
-    required: true
   base:
-    description: The branch the pull request targets, by name (e.g. `master`).
-    required: true
-  diff-base:
-    description: >-
-      Local git ref the changed-file diff runs against. Defaults to
-      `origin/<base>`; release-please wants the branch name, git wants a ref.
+    description: The branch the pull request targets, by name.
     required: false
     default: ""
-  head:
-    description: The pull request head ref, for the changed-file diff.
-    required: false
-    default: HEAD
   head-sha:
     description: The commit the projection describes, stamped in the footer.
     required: false
@@ -47,15 +60,25 @@ inputs:
     description: The pull request head branch name.
     required: false
     default: ""
-  number:
-    description: The pull request number, so changelog lines can link to it.
-    required: false
-    default: "0"
-  token:
+
+  changed-files:
     description: >-
-      Token for release-please's reads. Needs `contents: read` only; the
-      default GITHUB_TOKEN is enough.
-    required: true
+      Where the changed-file list comes from. `auto` (default) diffs the
+      checkout and falls back to the API when the checkout is too shallow to
+      hold the merge base; `git` insists on the checkout; `api` skips it.
+    required: false
+    default: auto
+  head:
+    description: Local git ref of the pull request head, for the changed-file diff.
+    required: false
+    default: HEAD
+  diff-base:
+    description: >-
+      Local git ref the changed-file diff runs against. Defaults to
+      `origin/<base>`; release-please wants a branch name, git wants a ref.
+    required: false
+    default: ""
+
   config-file:
     description: Path to release-please-config.json.
     required: false
@@ -64,107 +87,96 @@ inputs:
     description: Path to .release-please-manifest.json.
     required: false
     default: .release-please-manifest.json
-  release-prs:
+  repo-root:
+    description: Directory the two files above are read from.
+    required: false
+    default: "."
+
+  visible-types:
     description: >-
-      Optional `<branch>\t<url>` file listing open pull requests, so a pending
-      version can link to the release PR holding it.
+      Commit types that render a changelog line, and so can open a release,
+      as a comma- or space-separated list. Overrides what is resolved from
+      the config's `changelog-sections`, which is itself preferred to the
+      conventionalcommits defaults.
+    required: false
+    default: ""
+  hidden-types:
+    description: >-
+      Commit types the changelog recognizes but does not render. Same form
+      and same precedence as `visible-types`.
+    required: false
+    default: ""
+  release-branch-prefix:
+    description: >-
+      How release-please names its own release pull request branches. Only
+      set this if the repository has changed it from `release-please--`.
+    required: false
+    default: ""
+
+  merge-method:
+    description: >-
+      How this repository merges pull requests. `auto` (default) reads the
+      repository's settings and notes it in the comment when they will not
+      produce the commit the projection assumes. `squash`, `merge` and
+      `rebase` assert one without the read.
+    required: false
+    default: auto
+  link-release-prs:
+    description: >-
+      List the open pull requests, so a pending version can link to the
+      release pull request holding it. Set false to skip the call.
+    required: false
+    default: "true"
+
+  comment-header:
+    description: >-
+      Identifies the sticky comment. Change it only to keep two invocations
+      on the same pull request from editing each other's comment.
+    required: false
+    default: projected-releases
+  output-file:
+    description: Where the rendered comment body is written.
+    required: false
+    default: projected-releases.md
+  step-summary:
+    description: Also write the projection to the job summary.
+    required: false
+    default: "true"
+
+  api-url:
+    description: REST API root. Defaults to the running server's.
+    required: false
+    default: ""
+  graphql-url:
+    description: GraphQL endpoint. Defaults to the running server's.
     required: false
     default: ""
   run-url:
-    description: This workflow run, linked from the footer.
+    description: This workflow run, linked from the comment's footer.
     required: false
     default: ""
-  output-file:
-    description: Where to write the rendered comment body.
-    required: false
-    default: projected-releases.md
 
 outputs:
   comment-file:
     description: The file the comment body was written to.
-    value: ${{ inputs.output-file }}
+  body:
+    description: The rendered comment body.
+  releases:
+    description: >-
+      The projected releases as JSON, one `{component, version, notes}` per
+      tag merging would cut.
+  releases-count:
+    description: How many releases merging would cut. `0` is the common case.
+  malformed-title:
+    description: >-
+      `true` when the projection was withheld because the title is not a
+      Conventional Commit the changelog recognizes.
+  recognized-types:
+    description: >-
+      The commit types this run resolved, comma-separated. Pin a PR-title
+      gate to this rather than keeping a second copy of the list.
 
 runs:
-  using: composite
-  steps:
-    # No setup-node step, deliberately. Its `node-version-file` and
-    # `cache-dependency-path` are resolved against the workspace, while
-    # `github.action_path` is absolute, so the two concatenate into a path
-    # that does not exist -- and the action cannot know its own
-    # workspace-relative location to write instead. Runners ship a Node new
-    # enough for this package, so the runner's is used and the version
-    # requirement is checked below rather than installed.
-    #
-    # The cost is `npm ci` without a cache on every run. That is a few
-    # seconds on an advisory comment, and the alternative -- hoisting
-    # setup-node into every caller's workflow -- would undo the point of
-    # packaging this as an action at all.
-    - name: Check the runner's Node against the package's engines
-      shell: bash
-      env:
-        ACTION_PATH: ${{ github.action_path }}
-      run: |
-        # The first run of digits in `engines.node`, so the requirement is
-        # declared once by the package rather than restated here. Matched
-        # rather than stripped: ">=22" starts with a non-digit, so stripping
-        # from the first one yields the empty string, and an empty `required`
-        # compares as zero -- a guard that always passes.
-        required=$(node -p \
-          "(require('$ACTION_PATH/package.json').engines.node.match(/\\d+/) || [''])[0]")
-        actual=$(node -p "process.versions.node.split('.')[0]")
-        if [[ ! "$required" =~ ^[0-9]+$ ]]; then
-          echo "::error::could not read a major version from engines.node" >&2
-          exit 1
-        fi
-        if (( actual < required )); then
-          echo "::error::projected-releases needs Node >= $required;" \
-            "this runner has $actual. Add actions/setup-node to the workflow." >&2
-          exit 1
-        fi
-        echo "node $actual satisfies >= $required"
-    - run: npm ci && npm run build
-      shell: bash
-      working-directory: ${{ github.action_path }}
-    # The title and body reach the tool through the environment and a file,
-    # never through `${{ }}` interpolated into a shell line: a pull request
-    # title is attacker-controlled text, and interpolation would run it.
-    - shell: bash
-      env:
-        PR_TITLE: ${{ inputs.title }}
-        PR_BODY: ${{ inputs.body }}
-        GITHUB_TOKEN: ${{ inputs.token }}
-        ACTION_PATH: ${{ github.action_path }}
-        REPOSITORY: ${{ inputs.repository }}
-        BASE: ${{ inputs.base }}
-        DIFF_BASE: ${{ inputs.diff-base }}
-        HEAD: ${{ inputs.head }}
-        HEAD_SHA: ${{ inputs.head-sha }}
-        HEAD_BRANCH: ${{ inputs.head-branch }}
-        PR_NUMBER: ${{ inputs.number }}
-        CONFIG_FILE: ${{ inputs.config-file }}
-        MANIFEST_FILE: ${{ inputs.manifest-file }}
-        RUN_URL: ${{ inputs.run-url }}
-        RELEASE_PRS: ${{ inputs.release-prs }}
-        OUT: ${{ inputs.output-file }}
-      run: |
-        printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
-        # The two optional flags go through an array rather than
-        # `${VAR:+--flag "$VAR"}`: that form word-splits its expansion, so a
-        # value containing a space would arrive as two arguments.
-        optional=()
-        [[ -n "$DIFF_BASE" ]] && optional+=(--diff-base "$DIFF_BASE")
-        [[ -n "$RELEASE_PRS" ]] && optional+=(--release-prs "$RELEASE_PRS")
-        node "$ACTION_PATH/dist/main.js" \
-          --title "$PR_TITLE" \
-          --body-file "$RUNNER_TEMP/pr-body.md" \
-          --repo "$REPOSITORY" \
-          --base "$BASE" \
-          --head "$HEAD" \
-          --head-sha "$HEAD_SHA" \
-          --head-branch "$HEAD_BRANCH" \
-          --number "$PR_NUMBER" \
-          --config-file "$CONFIG_FILE" \
-          --manifest-file "$MANIFEST_FILE" \
-          --run-url "$RUN_URL" \
-          "${optional[@]}" \
-          --out "$OUT"
+  # Node 20 was removed from Actions runners on 2026-09-16.
+  using: node24
+  main: dist/index.mjs

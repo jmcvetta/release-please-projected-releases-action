@@ -6,27 +6,23 @@
     "lib": [
       "ES2022"
     ],
-    "outDir": "dist",
-    "rootDir": "src",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-    "declaration": true,
-    "sourceMap": true,
     "skipLibCheck": true,
     "types": [
       "node"
     ],
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "noEmit": true
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "scripts/**/*.mjs"
   ],
   "exclude": [
     "node_modules",
-    "dist",
-    "src/**/*.test.ts",
-    "src/**/*.fixture.ts"
+    "dist"
   ]
 }
