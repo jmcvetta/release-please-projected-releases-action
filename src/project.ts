@@ -245,6 +245,15 @@ export interface Release {
  * So the entries decide whenever they can — they carry both the component and
  * the version — and the pull request's own version is the fallback for the
  * separate case, where it is the authoritative one.
+ *
+ * The version and the component are answered from different places even
+ * there. The version on the pull request is authoritative; the component in
+ * the *branch* is not, because release-please names a branch after the
+ * package (`getBranchComponent`) and attributes a release to the component
+ * its tags carry (`getComponent`), and those differ for a package with
+ * `include-component-in-tag: false` — the branch says `acme-api`, the release
+ * says nothing at all. Since the entry carries the second one, it wins; the
+ * branch is the fallback for a pull request with no entries to read.
  */
 export function toReleases(
   prs: readonly ReleasePullRequest[],
@@ -275,7 +284,7 @@ export function toReleases(
     const version = pr.version?.toString();
     if (!version) continue;
     releases.push({
-      component: branchComponent ?? data[0]?.component ?? "",
+      component: data[0]?.component ?? branchComponent ?? "",
       version,
       notes: data
         .map((d) => d.notes.trim())

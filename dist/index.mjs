@@ -61828,7 +61828,7 @@ function toReleases(prs, releaseBranchPrefix) {
     const version = pr.version?.toString();
     if (!version) continue;
     releases.push({
-      component: branchComponent ?? data2[0]?.component ?? "",
+      component: data2[0]?.component ?? branchComponent ?? "",
       version,
       notes: data2.map((d) => d.notes.trim()).filter(Boolean).join("\n\n")
     });

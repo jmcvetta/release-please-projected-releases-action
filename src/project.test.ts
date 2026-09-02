@@ -688,3 +688,62 @@ describe("a pull request that introduces release-please itself", () => {
     expect(seen).toContain("package.json");
   });
 });
+
+// A separate release pull request carries the authoritative version on the
+// pull request itself, so that is where the version comes from. The component
+// is a different question: the branch names the package release-please knows
+// it by, which is not the name it attributes the *release* to. A package that
+// keeps its component out of its tags releases under no component at all, and
+// reading the branch there produced a component nothing could be joined to --
+// so render dropped the row and the comment said "None" for a merge that cuts
+// a tag.
+describe("a package that keeps its component out of its tags", () => {
+  const CONFIG_BARE = {
+    "separate-pull-requests": true,
+    packages: {
+      api: {
+        "release-type": "simple",
+        component: "acme-api",
+        "include-component-in-tag": false,
+      },
+    },
+  };
+  const MANIFEST_BARE = { api: "2.4.1" };
+
+  async function bare(): Promise<Projection> {
+    return project({
+      github: fakeScm({
+        config: CONFIG_BARE,
+        manifest: MANIFEST_BARE,
+        releases: [{ tagName: "v2.4.1", sha: RELEASE_SHA }],
+      }),
+      config: CONFIG_BARE,
+      manifest: MANIFEST_BARE,
+      commit: {
+        title: "feat: a thing",
+        body: "",
+        files: ["api/src/x.ts"],
+        number: 7,
+        headSha: "abcdef1234567890",
+        headBranch: "topic",
+        baseBranch: "master",
+      },
+    });
+  }
+
+  it("attributes the release to no component, as release-please does", async () => {
+    const projection = await bare();
+    expect(projection.projected).toEqual([
+      expect.objectContaining({ component: "", version: "2.5.0" }),
+    ]);
+    expect(projection.packages).toEqual([
+      expect.objectContaining({ path: "api", releaseComponent: "" }),
+    ]);
+  });
+
+  it("keeps the row, rather than reporting none", async () => {
+    const out = render(await bare(), { title: "feat: a thing", malformed: false });
+    expect(out).toContain("`v2.5.0`");
+    expect(out).not.toContain("None —");
+  });
+});
