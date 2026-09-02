@@ -29,7 +29,14 @@ permissions:
 jobs:
   comment:
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.event == 'pull_request'
+    # `completed` covers every ending, not just the good one. The rendering
+    # workflow skips its own job on release-please's branches, and a skipped
+    # or failed run uploads no artifact -- so without the conclusion the
+    # download below fails and puts a red check on pull requests this action
+    # deliberately says nothing about.
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
     steps:
       - uses: actions/download-artifact@v4
         with:
