@@ -74,14 +74,15 @@ describe("Client", () => {
     const { client: c } = client([
       { body: [{ html_url: "https://x/1", head: { ref: "release-please--branches--master" } }] },
     ]);
-    expect(await c.openPullRequests()).toEqual([
-      { headRefName: "release-please--branches--master", url: "https://x/1" },
-    ]);
+    expect(await c.openPullRequests()).toEqual({
+      prs: [{ headRefName: "release-please--branches--master", url: "https://x/1" }],
+      complete: true,
+    });
   });
 
-  // release-please leaves one release pull request standing per component
-  // until someone merges it, so in a busy repository they are among the
-  // oldest open -- which the first page, newest first, does not hold.
+  // A release pull request is not reliably on the first page: it stands open
+  // until someone merges it, and in a repository where nobody does it is among
+  // the oldest open rather than the newest.
   it("follows the pages of open pull requests", async () => {
     const full = Array.from({ length: 100 }, (_, i) => ({
       html_url: `https://x/${i}`,
@@ -91,7 +92,7 @@ describe("Client", () => {
       { body: full },
       { body: [{ html_url: "https://x/rp", head: { ref: "release-please--branches--master" } }] },
     ]);
-    const prs = await c.openPullRequests();
+    const { prs, complete } = await c.openPullRequests();
     expect(calls).toHaveLength(2);
     expect(calls[1]?.url).toContain("page=2");
     expect(prs).toHaveLength(101);
@@ -99,6 +100,24 @@ describe("Client", () => {
       headRefName: "release-please--branches--master",
       url: "https://x/rp",
     });
+    expect(complete).toBe(true);
+  });
+
+  // The cap bounds the calls one run makes, and a repository past it may hold
+  // a release pull request this listing never reached. Reporting the cut is
+  // the difference between "there is no link" and "there might be one".
+  it("says so when the page cap cut the listing short", async () => {
+    const full = Array.from({ length: 100 }, (_, i) => ({
+      html_url: `https://x/${i}`,
+      head: { ref: `topic/${i}` },
+    }));
+    const { client: c, calls } = client(
+      Array.from({ length: 10 }, () => ({ body: full })),
+    );
+    const { prs, complete } = await c.openPullRequests();
+    expect(calls).toHaveLength(10);
+    expect(prs).toHaveLength(1000);
+    expect(complete).toBe(false);
   });
 
   it("stops paging comments on a short page", async () => {

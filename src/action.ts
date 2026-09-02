@@ -245,10 +245,16 @@ async function standingReleasePrs(
   if (!boolInput("link-release-prs", true, env)) return new Map();
   try {
     const prefix = input("release-branch-prefix", env);
-    return indexReleasePrs(
-      await client.openPullRequests(),
-      prefix || undefined,
-    );
+    const open = await client.openPullRequests();
+    if (!open.complete) {
+      warning(
+        "this repository has more open pull requests than one run reads, so a" +
+          " release pull request may be missing from the listing and the" +
+          " version it holds may go unlinked. Set `link-release-prs: false` to" +
+          " drop the links altogether.",
+      );
+    }
+    return indexReleasePrs(open.prs, prefix || undefined);
   } catch (error) {
     warning(`could not list the open release pull requests: ${String(error)}`);
     return new Map();

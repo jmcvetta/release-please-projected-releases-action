@@ -55,10 +55,28 @@ export interface IssueComment {
   body: string;
 }
 
+/**
+ * OPEN_PR_PAGES caps the pages of open pull requests read in one run, so a
+ * repository with an enormous backlog costs a bounded number of calls.
+ */
+const OPEN_PR_PAGES = 10;
+
 /** OpenPullRequest is one open pull request, as release-pr discovery reads it. */
 export interface OpenPullRequest {
   headRefName: string;
   url: string;
+}
+
+/**
+ * OpenPullRequests is a listing and whether it reached the end.
+ *
+ * `complete` is false when the page cap cut the listing short, which means a
+ * release pull request may be missing from it. The caller says so rather than
+ * rendering a table whose links are silently incomplete.
+ */
+export interface OpenPullRequests {
+  prs: OpenPullRequest[];
+  complete: boolean;
 }
 
 /**
@@ -148,26 +166,31 @@ export class Client {
   }
 
   /**
-   * openPullRequests lists every open pull request, following pages.
+   * openPullRequests lists the open pull requests, following pages.
    *
-   * The release pull requests it is read for are among the oldest a busy
-   * repository has open — release-please leaves one standing per component
-   * until someone merges it — so a single page of 100, newest first, is
-   * exactly where they are not. Stopping there lost the links in the
-   * repositories most likely to want them.
+   * There is no server-side filter for the ones this is read for: `/pulls`
+   * selects by exact head branch, not by prefix, and release-please's branches
+   * are only known by their prefix. So the list is read whole.
+   *
+   * The order is GitHub's default, newest first, and deliberately left alone.
+   * A standing release pull request is opened afresh after each release, so in
+   * a repository that actually releases it is among the *newest* open — while
+   * in one where nobody merges it, it is among the oldest. Neither end is
+   * reliably the right one to read first, and no ordering makes the page cap
+   * safe, so the cap reports itself instead of quietly dropping the tail.
    */
-  async openPullRequests(): Promise<OpenPullRequest[]> {
+  async openPullRequests(): Promise<OpenPullRequests> {
     const prs: OpenPullRequest[] = [];
-    for (let page = 1; page <= 10; page++) {
+    for (let page = 1; page <= OPEN_PR_PAGES; page++) {
       const batch = await this.request<
         { html_url?: string; head?: { ref?: string } }[]
       >("GET", this.repoPath(`/pulls?state=open&per_page=100&page=${page}`));
       for (const pr of batch) {
         prs.push({ headRefName: pr.head?.ref ?? "", url: pr.html_url ?? "" });
       }
-      if (batch.length < 100) break;
+      if (batch.length < 100) return { prs, complete: true };
     }
-    return prs;
+    return { prs, complete: false };
   }
 
   /**
