@@ -62172,6 +62172,9 @@ var EMPTY = {
   projected: [],
   pending: []
 };
+function graphqlRoot(url) {
+  return url.replace(/\/+$/, "").replace(/\/graphql$/, "");
+}
 function quietLogger() {
   const toStderr = (...args) => console.error(...args);
   (0, import_release_please2.setLogger)({
@@ -62224,7 +62227,7 @@ async function projectPullRequest(options, config, manifest, files) {
     defaultBranch: options.base,
     ...options.token ? { token: options.token } : {},
     ...options.apiUrl ? { apiUrl: options.apiUrl } : {},
-    ...options.graphqlUrl ? { graphqlUrl: options.graphqlUrl } : {}
+    ...options.graphqlUrl ? { graphqlUrl: graphqlRoot(options.graphqlUrl) } : {}
   });
   return project({
     github,

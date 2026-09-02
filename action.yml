@@ -183,7 +183,10 @@ inputs:
     required: false
     default: ""
   graphql-url:
-    description: GraphQL endpoint. Defaults to the running server's.
+    description: >-
+      GraphQL API root. Defaults to the running server's. Either form works --
+      a trailing `/graphql` is stripped, because release-please hands this to
+      Octokit as a base URL and Octokit appends `/graphql` itself.
     required: false
     default: ""
   run-url:

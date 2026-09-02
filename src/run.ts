@@ -98,6 +98,25 @@ export interface Outcome {
 }
 
 /**
+ * graphqlRoot normalizes a GraphQL URL to the form release-please wants.
+ *
+ * release-please hands the value to Octokit as `baseUrl`, and Octokit appends
+ * `/graphql` to it -- so its own default is `https://api.github.com`, the API
+ * root, not the endpoint. A runner's `GITHUB_GRAPHQL_URL` is the endpoint
+ * (`https://api.github.com/graphql`), and so is `${{ github.graphql_url }}`,
+ * which is the obvious thing for a caller to pass. Handing either through
+ * unchanged produces `https://api.github.com/graphql/graphql` and a bare
+ * `HttpError: Not Found` from the first merge-commit query.
+ *
+ * Found by running the action on its own pull request, which is the only
+ * place this could be found: every test drives a fixture `GitHub` that is
+ * never constructed from a URL.
+ */
+export function graphqlRoot(url: string): string {
+  return url.replace(/\/+$/, "").replace(/\/graphql$/, "");
+}
+
+/**
  * quietLogger sends release-please's logging to stderr.
  *
  * It logs to stdout by default, which for the CLI would land in the middle of
@@ -202,7 +221,9 @@ async function projectPullRequest(
       defaultBranch: options.base,
       ...(options.token ? { token: options.token } : {}),
       ...(options.apiUrl ? { apiUrl: options.apiUrl } : {}),
-      ...(options.graphqlUrl ? { graphqlUrl: options.graphqlUrl } : {}),
+      ...(options.graphqlUrl
+      ? { graphqlUrl: graphqlRoot(options.graphqlUrl) }
+      : {}),
     }));
 
   return project({
