@@ -30,8 +30,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test
 
+      # Before the tests, not after: src/bundle.test.ts runs dist/index.mjs in
+      # a subprocess, so testing first would measure the committed bundle
+      # rather than the source this pull request changed.
       - name: Rebuild the bundle
         run: npm run build
       - name: Fail if the committed bundle is not the source
@@ -41,6 +43,8 @@ jobs:
             git diff --stat -- dist >&2
             exit 1
           fi
+
+      - run: npm test
 
       # The bundle is where this action fails in the way nothing else catches.
       # esbuild leaves the CommonJS `require` calls it cannot resolve to a stub

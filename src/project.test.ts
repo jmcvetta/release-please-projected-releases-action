@@ -12,7 +12,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { setLogger } from "release-please";
 import { fakeScm, RELEASE_SHA } from "./fake-scm.fixture.js";
-import { project } from "./project.js";
+import { project, tagFor } from "./project.js";
 import type { Projection } from "./project.js";
 import { render } from "./render.js";
 
@@ -540,5 +540,87 @@ describe("a release for a component the pull request does not touch", () => {
     });
     expect(out).toContain("`acme-api@v2.5.0`");
     expect(out).toContain("`acme-ui@v2.5.0`");
+  });
+});
+
+describe("a repository release-please runs without a manifest", () => {
+  // release-please's plain mode: `release-type:` on the action, no
+  // release-please-config.json and no .release-please-manifest.json. This is
+  // how a single-package repository is normally released, and it is what this
+  // action's own repository does -- so without it the action could not
+  // project its own releases.
+  //
+  // `Manifest.fromConfig` is public surface alongside `fromManifest`, and the
+  // synthetic-commit wrapper is indifferent to which built the manifest: it
+  // wraps the `GitHub`, not the `Manifest`.
+  const PLAIN = { releaseType: "node" as const };
+
+  /** plain projects one pull request against a fixture repository holding a
+   * package.json and one release tag, which is what plain mode reads. */
+  async function plain(
+    title: string,
+    body = "",
+    files = ["src/x.ts"],
+  ): Promise<Projection> {
+    return project({
+      github: fakeScm({
+        config: {},
+        manifest: {},
+        releases: [{ tagName: "v2.4.1", sha: RELEASE_SHA }],
+        files: {
+          "package.json": JSON.stringify({ name: "widgets", version: "2.4.1" }),
+        },
+      }),
+      config: {},
+      manifest: {},
+      plain: PLAIN,
+      commit: {
+        title,
+        body,
+        files,
+        number: 7,
+        headSha: "abcdef1234567890",
+        headBranch: "topic",
+        baseBranch: "master",
+      },
+    });
+  }
+
+  it("projects a release with no config or manifest file anywhere", async () => {
+    const p = await plain("feat: a thing");
+    expect(p.projected.map((r) => r.version)).toEqual(["2.5.0"]);
+  });
+
+  it("still lets a hidden type release nothing", async () => {
+    // The rule that matters most in the comment, and it is upstream's, not
+    // this action's -- so it has to hold identically in both modes.
+    expect((await plain("chore: tidy")).projected).toEqual([]);
+  });
+
+  it("takes the current version from the tag, since no manifest names it", async () => {
+    const p = await plain("fix: a thing");
+    expect(p.packages).toHaveLength(1);
+    expect(p.packages[0]?.current).toBe("2.4.1");
+  });
+
+  it("owns the whole repository, so any changed file counts", async () => {
+    // The single package sits at the root, and splitFiles hands a root
+    // package every file -- including one at the repository root, which in
+    // manifest mode belongs to no component at all.
+    const p = await plain("feat: a thing", "", ["README.md"]);
+    expect([...p.touched.keys()]).toEqual(["."]);
+  });
+
+  it("spells the tag without a component", async () => {
+    // A single-package repository tags `v1.2.3`. include-component-in-tag
+    // defaults to false here, unlike manifest mode where it defaults to true.
+    const p = await plain("feat: a thing");
+    const pkg = p.packages[0]!;
+    expect(tagFor(pkg, p.projected[0]!.version)).toBe("v2.5.0");
+  });
+
+  it("honours a Release-As footer, as it does with a manifest", async () => {
+    const p = await plain("fix: a thing", "Release-As: 9.9.9");
+    expect(p.projected.map((r) => r.version)).toEqual(["9.9.9"]);
   });
 });

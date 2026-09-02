@@ -15,7 +15,7 @@ import type { GitHub as GitHubType } from "release-please";
 import { isMalformed, resolveTypes } from "./conventional.js";
 import type { TypeSet } from "./conventional.js";
 import { project, DEFAULT_CONFIG_FILE, DEFAULT_MANIFEST_FILE } from "./project.js";
-import type { Projection } from "./project.js";
+import type { PlainConfig, Projection } from "./project.js";
 import { render } from "./render.js";
 
 /** EMPTY is the projection rendered when the title is withheld from one. */
@@ -54,6 +54,12 @@ export interface RunOptions {
   files: string[];
   /** repoRoot is the checkout the config and manifest are read from. */
   repoRoot?: string;
+  /**
+   * plain selects release-please's non-manifest mode: one package configured
+   * here rather than by a release-please-config.json in the checkout. Nothing
+   * is read from disk when it is set.
+   */
+  plain?: PlainConfig | undefined;
   configFile?: string;
   manifestFile?: string;
   /** releasePrs maps a component to its standing release pull request URL. */
@@ -89,6 +95,25 @@ export interface Outcome {
   malformed: boolean;
   /** types is the changelog type list this run resolved. */
   types: TypeSet;
+}
+
+/**
+ * graphqlRoot normalizes a GraphQL URL to the form release-please wants.
+ *
+ * release-please hands the value to Octokit as `baseUrl`, and Octokit appends
+ * `/graphql` to it -- so its own default is `https://api.github.com`, the API
+ * root, not the endpoint. A runner's `GITHUB_GRAPHQL_URL` is the endpoint
+ * (`https://api.github.com/graphql`), and so is `${{ github.graphql_url }}`,
+ * which is the obvious thing for a caller to pass. Handing either through
+ * unchanged produces `https://api.github.com/graphql/graphql` and a bare
+ * `HttpError: Not Found` from the first merge-commit query.
+ *
+ * Found by running the action on its own pull request, which is the only
+ * place this could be found: every test drives a fixture `GitHub` that is
+ * never constructed from a URL.
+ */
+export function graphqlRoot(url: string): string {
+  return url.replace(/\/+$/, "").replace(/\/graphql$/, "");
 }
 
 /**
@@ -128,11 +153,21 @@ export async function buildComment(options: RunOptions): Promise<Outcome> {
       unknown
     >;
 
-  const config = readJson(configFile);
-  const manifest = readJson(manifestFile) as Record<string, string>;
+  // Plain mode has no files to read. The empty objects stand in so the rest
+  // of the pipeline keeps one shape; `project` ignores them when `plain` is
+  // set.
+  const config = options.plain ? {} : readJson(configFile);
+  const manifest = options.plain
+    ? {}
+    : (readJson(manifestFile) as Record<string, string>);
 
   const types = resolveTypes({
-    config,
+    // A plain-mode caller declares its changelog sections on the releaser
+    // config rather than in a file, and they mean the same thing: the
+    // types this repository's changelog recognizes.
+    config: options.plain?.changelogSections
+      ? { "changelog-sections": options.plain.changelogSections }
+      : config,
     ...(options.typeOverrides?.visible
       ? { visible: options.typeOverrides.visible }
       : {}),
@@ -186,7 +221,9 @@ async function projectPullRequest(
       defaultBranch: options.base,
       ...(options.token ? { token: options.token } : {}),
       ...(options.apiUrl ? { apiUrl: options.apiUrl } : {}),
-      ...(options.graphqlUrl ? { graphqlUrl: options.graphqlUrl } : {}),
+      ...(options.graphqlUrl
+      ? { graphqlUrl: graphqlRoot(options.graphqlUrl) }
+      : {}),
     }));
 
   return project({
@@ -196,6 +233,7 @@ async function projectPullRequest(
     configFile: files.configFile,
     manifestFile: files.manifestFile,
     releaseBranchPrefix: files.releaseBranchPrefix,
+    ...(options.plain ? { plain: options.plain } : {}),
     commit: {
       title: options.title,
       body: options.body,
