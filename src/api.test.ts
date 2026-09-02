@@ -47,7 +47,7 @@ describe("Client", () => {
     expect(calls[0]?.headers["authorization"]).toBe("Bearer t");
     expect(calls[0]?.headers["x-github-api-version"]).toBe("2022-11-28");
     expect(calls[0]?.url).toBe(
-      "https://api.github.com/repos/acme/widgets/pulls?state=open&per_page=100",
+      "https://api.github.com/repos/acme/widgets/pulls?state=open&per_page=100&page=1",
     );
   });
 
@@ -77,6 +77,28 @@ describe("Client", () => {
     expect(await c.openPullRequests()).toEqual([
       { headRefName: "release-please--branches--master", url: "https://x/1" },
     ]);
+  });
+
+  // release-please leaves one release pull request standing per component
+  // until someone merges it, so in a busy repository they are among the
+  // oldest open -- which the first page, newest first, does not hold.
+  it("follows the pages of open pull requests", async () => {
+    const full = Array.from({ length: 100 }, (_, i) => ({
+      html_url: `https://x/${i}`,
+      head: { ref: `topic/${i}` },
+    }));
+    const { client: c, calls } = client([
+      { body: full },
+      { body: [{ html_url: "https://x/rp", head: { ref: "release-please--branches--master" } }] },
+    ]);
+    const prs = await c.openPullRequests();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.url).toContain("page=2");
+    expect(prs).toHaveLength(101);
+    expect(prs[100]).toEqual({
+      headRefName: "release-please--branches--master",
+      url: "https://x/rp",
+    });
   });
 
   it("stops paging comments on a short page", async () => {

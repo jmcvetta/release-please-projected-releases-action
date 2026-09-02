@@ -61414,13 +61414,25 @@ var Client = class {
       squashTitle: String(raw["squash_merge_commit_title"] ?? "PR_TITLE")
     };
   }
-  /** openPullRequests lists the open pull requests, newest page first. */
-  async openPullRequests(limit = 100) {
-    const raw = await this.request("GET", this.repoPath(`/pulls?state=open&per_page=${limit}`));
-    return raw.map((pr) => ({
-      headRefName: pr.head?.ref ?? "",
-      url: pr.html_url ?? ""
-    }));
+  /**
+   * openPullRequests lists every open pull request, following pages.
+   *
+   * The release pull requests it is read for are among the oldest a busy
+   * repository has open — release-please leaves one standing per component
+   * until someone merges it — so a single page of 100, newest first, is
+   * exactly where they are not. Stopping there lost the links in the
+   * repositories most likely to want them.
+   */
+  async openPullRequests() {
+    const prs = [];
+    for (let page = 1; page <= 10; page++) {
+      const batch = await this.request("GET", this.repoPath(`/pulls?state=open&per_page=100&page=${page}`));
+      for (const pr of batch) {
+        prs.push({ headRefName: pr.head?.ref ?? "", url: pr.html_url ?? "" });
+      }
+      if (batch.length < 100) break;
+    }
+    return prs;
   }
   /**
    * pullRequestFiles lists the files a pull request changes.
