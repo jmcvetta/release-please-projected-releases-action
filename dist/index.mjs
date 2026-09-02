@@ -61722,14 +61722,41 @@ function readPackages(config, manifest) {
   const topInclude = config["include-component-in-tag"] ?? true;
   return Object.keys(packages).sort().map((path) => {
     const pkg = packages[path] ?? {};
+    const component = pkg["component"] ?? "";
+    const includeComponent = pkg["include-component-in-tag"] ?? topInclude;
     return {
       path,
-      component: pkg["component"] ?? "",
+      component,
+      releaseComponent: includeComponent ? component : "",
       current: manifest[path],
       separator: pkg["tag-separator"] ?? topSeparator,
-      includeComponent: pkg["include-component-in-tag"] ?? topInclude
+      includeComponent
     };
   });
+}
+async function namePackages(manifest, packages) {
+  const build = manifest.getStrategiesByPath;
+  if (typeof build !== "function") return [...packages];
+  try {
+    const strategies = await build.call(manifest);
+    return await Promise.all(
+      packages.map(async (pkg) => {
+        const strategy = strategies[pkg.path];
+        if (!strategy) return pkg;
+        const [name2, releaseComponent] = await Promise.all([
+          strategy.getBranchComponent(),
+          strategy.getComponent()
+        ]);
+        return {
+          ...pkg,
+          component: pkg.component || name2 || "",
+          releaseComponent: releaseComponent ?? ""
+        };
+      })
+    );
+  } catch {
+    return [...packages];
+  }
 }
 function toReleases(prs, releaseBranchPrefix) {
   const releases = [];
@@ -61788,7 +61815,7 @@ function releaseAsNotes(body) {
 async function project(options) {
   const configFile = options.configFile ?? DEFAULT_CONFIG_FILE;
   const manifestFile = options.manifestFile ?? DEFAULT_MANIFEST_FILE;
-  const packages = readPackages(options.config, options.manifest);
+  const declared = readPackages(options.config, options.manifest);
   const overrides = {
     [configFile]: options.config,
     [manifestFile]: options.manifest
@@ -61807,6 +61834,7 @@ async function project(options) {
   const prefix = options.releaseBranchPrefix;
   const projected = toReleases(await withPr.buildPullRequests(), prefix);
   view.assertConsulted();
+  const packages = await namePackages(withPr, declared);
   const withoutPr = await import_release_please.Manifest.fromManifest(
     options.github,
     options.commit.baseBranch,
@@ -61906,13 +61934,14 @@ function render(projection, options) {
   return [...lines, "", footer(options)].join("\n") + "\n";
 }
 function renderProjection(projection, options) {
-  const byComponent = new Map(projection.packages.map((p) => [p.component, p]));
-  const touched = new Set(
-    [...projection.touched.keys()].flatMap((path) => {
-      const pkg = projection.packages.find((p) => p.path === path);
-      return pkg ? [pkg.component] : [];
-    })
+  const byComponent = new Map(
+    projection.packages.map((p) => [p.releaseComponent, p])
   );
+  const touchedPackages = [...projection.touched.keys()].flatMap((path) => {
+    const pkg = projection.packages.find((p) => p.path === path);
+    return pkg ? [pkg] : [];
+  });
+  const touched = new Set(touchedPackages.map((p) => p.releaseComponent));
   const pendingBy = new Map(projection.pending.map((r) => [r.component, r]));
   const rows = projection.projected.filter((r) => touched.has(r.component)).flatMap((projected) => {
     const pkg = byComponent.get(projected.component);
@@ -61923,7 +61952,7 @@ function renderProjection(projection, options) {
   const out = ["## Projected releases", ""];
   if (moved.length === 0) {
     out.push(
-      ...unmoved.length > 0 ? ["No component's version changes."] : none(projection, options, touched)
+      ...unmoved.length > 0 ? ["No component's version changes."] : none(projection, options, touchedPackages)
     );
   } else {
     out.push(
@@ -61947,7 +61976,7 @@ function renderProjection(projection, options) {
   return out;
 }
 function none(projection, options, touched) {
-  if (touched.size === 0) {
+  if (touched.length === 0) {
     const dirs = [
       ...new Set(projection.files.map((f) => f.split("/")[0] ?? f))
     ].sort();
@@ -61964,8 +61993,11 @@ function none(projection, options, touched) {
   return [
     line,
     "",
-    `Components touched: ${[...touched].sort().map((c) => `\`${c}\``).join(", ")}.`
+    `Components touched: ${nameList(touched)}.`
   ];
+}
+function nameList(packages) {
+  return [...new Set(packages.map((p) => p.component || p.path))].sort().map((name2) => `\`${name2}\``).join(", ");
 }
 function pendingCell(row, options) {
   if (!row.pending) return "\u2014";

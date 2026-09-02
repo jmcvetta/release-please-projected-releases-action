@@ -14,7 +14,7 @@
  */
 
 import { Manifest } from "release-please";
-import type { GitHub, ReleasePullRequest } from "release-please";
+import type { GitHub, ReleasePullRequest, Strategy } from "release-please";
 import { componentOfBranch } from "./conventional.js";
 import { splitFiles } from "./split.js";
 import type { HeadOverrides, SyntheticCommit } from "./pr-view.js";
@@ -31,6 +31,15 @@ export interface PackageConfig {
   path: string;
   /** component is the name the component's tags carry. */
   component: string;
+  /**
+   * releaseComponent is the name release-please attributes its releases to,
+   * which is the key a projected release is joined to this package by.
+   *
+   * It is `component` for an ordinary package, and the empty string for one
+   * that keeps the component out of its tags — release-please reports no
+   * component for those, whatever the config calls them.
+   */
+  releaseComponent: string;
   /** current is the manifest version, the base the next bump applies to. */
   current: string | undefined;
   separator: string;
@@ -53,6 +62,11 @@ export function tagFor(pkg: PackageConfig, version: string): string {
  *
  * Per-package options override the top-level ones, which is how
  * release-please itself resolves them.
+ *
+ * The config need not name a component at all, and this cannot invent the
+ * name release-please would derive for one that does not: that takes the
+ * strategy, which takes the repository. `namePackages` fills those in
+ * afterwards, from release-please itself.
  */
 export function readPackages(
   config: Record<string, unknown>,
@@ -69,15 +83,72 @@ export function readPackages(
     .sort()
     .map((path) => {
       const pkg = packages[path] ?? {};
+      const component = (pkg["component"] as string) ?? "";
+      const includeComponent =
+        (pkg["include-component-in-tag"] as boolean) ?? topInclude;
       return {
         path,
-        component: (pkg["component"] as string) ?? "",
+        component,
+        releaseComponent: includeComponent ? component : "",
         current: manifest[path],
         separator: (pkg["tag-separator"] as string) ?? topSeparator,
-        includeComponent:
-          (pkg["include-component-in-tag"] as boolean) ?? topInclude,
+        includeComponent,
       };
     });
+}
+
+/**
+ * namePackages replaces the configured component names with release-please's
+ * own.
+ *
+ * A package need not declare a component. `release-type: node` derives one
+ * from the package.json `name` (minus the scope), and other strategies derive
+ * one too. Since a projected release is joined to a package by that name, a
+ * package left holding the empty string matches no release: the table comes
+ * out empty and the comment says "None" for a pull request that really would
+ * cut a tag. Only release-please can say what the name is, so it is asked.
+ *
+ * `Manifest` builds its strategies internally and does not export them, so
+ * this reaches for a private method. That is a seam, but a mild one: the
+ * strategies are already built and cached by `buildPullRequests`, and if the
+ * method ever goes away the packages keep their configured names — which is
+ * exactly what they had before — rather than the run failing. Unlike the
+ * synthetic-commit seam, a wrong answer here shows up in the table.
+ */
+export async function namePackages(
+  manifest: Manifest,
+  packages: readonly PackageConfig[],
+): Promise<PackageConfig[]> {
+  const build = (
+    manifest as unknown as {
+      getStrategiesByPath?: () => Promise<Record<string, Strategy>>;
+    }
+  ).getStrategiesByPath;
+  if (typeof build !== "function") return [...packages];
+
+  try {
+    const strategies = await build.call(manifest);
+    return await Promise.all(
+      packages.map(async (pkg) => {
+        const strategy = strategies[pkg.path];
+        if (!strategy) return pkg;
+        // getBranchComponent is the name release-please knows the package by
+        // whether or not it tags with it; getComponent is the empty string
+        // when it does not, which is what the releases then carry.
+        const [name, releaseComponent] = await Promise.all([
+          strategy.getBranchComponent(),
+          strategy.getComponent(),
+        ]);
+        return {
+          ...pkg,
+          component: pkg.component || name || "",
+          releaseComponent: releaseComponent ?? "",
+        };
+      }),
+    );
+  } catch {
+    return [...packages];
+  }
 }
 
 /** Release is one component release-please would open a release for. */
@@ -277,7 +348,7 @@ export function releaseAsNotes(body: string): ReleaseAsNotes {
 export async function project(options: ProjectOptions): Promise<Projection> {
   const configFile = options.configFile ?? DEFAULT_CONFIG_FILE;
   const manifestFile = options.manifestFile ?? DEFAULT_MANIFEST_FILE;
-  const packages = readPackages(options.config, options.manifest);
+  const declared = readPackages(options.config, options.manifest);
   const overrides: HeadOverrides = {
     [configFile]: options.config,
     [manifestFile]: options.manifest,
@@ -297,6 +368,10 @@ export async function project(options: ProjectOptions): Promise<Projection> {
   const prefix = options.releaseBranchPrefix;
   const projected = toReleases(await withPr.buildPullRequests(), prefix);
   view.assertConsulted();
+
+  // After the pull requests are built, so the strategies this reads are the
+  // ones release-please has already constructed and cached.
+  const packages = await namePackages(withPr, declared);
 
   const withoutPr = await Manifest.fromManifest(
     options.github,

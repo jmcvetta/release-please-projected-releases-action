@@ -141,13 +141,17 @@ function renderProjection(
   projection: Projection,
   options: RenderOptions,
 ): string[] {
-  const byComponent = new Map(projection.packages.map((p) => [p.component, p]));
-  const touched = new Set(
-    [...projection.touched.keys()].flatMap((path) => {
-      const pkg = projection.packages.find((p) => p.path === path);
-      return pkg ? [pkg.component] : [];
-    }),
+  // Joined on the name release-please attributes releases to, not on the
+  // name the config spells: a package that declares no component still gets
+  // one, and a package that keeps its component out of its tags gets none.
+  const byComponent = new Map(
+    projection.packages.map((p) => [p.releaseComponent, p]),
   );
+  const touchedPackages = [...projection.touched.keys()].flatMap((path) => {
+    const pkg = projection.packages.find((p) => p.path === path);
+    return pkg ? [pkg] : [];
+  });
+  const touched = new Set(touchedPackages.map((p) => p.releaseComponent));
   const pendingBy = new Map(projection.pending.map((r) => [r.component, r]));
 
   const rows: Row[] = projection.projected
@@ -168,7 +172,7 @@ function renderProjection(
     out.push(
       ...(unmoved.length > 0
         ? ["No component's version changes."]
-        : none(projection, options, touched)),
+        : none(projection, options, touchedPackages)),
     );
   } else {
     out.push(
@@ -213,9 +217,9 @@ function renderProjection(
 function none(
   projection: Projection,
   options: RenderOptions,
-  touched: ReadonlySet<string>,
+  touched: readonly PackageConfig[],
 ): string[] {
-  if (touched.size === 0) {
+  if (touched.length === 0) {
     const dirs = [
       ...new Set(projection.files.map((f) => f.split("/")[0] ?? f)),
     ].sort();
@@ -241,8 +245,17 @@ function none(
   return [
     line,
     "",
-    `Components touched: ${[...touched].sort().map((c) => `\`${c}\``).join(", ")}.`,
+    `Components touched: ${nameList(touched)}.`,
   ];
+}
+
+/** nameList spells a set of packages by the name their tags carry, falling
+ * back to the path for a package whose tags name no component. */
+function nameList(packages: readonly PackageConfig[]): string {
+  return [...new Set(packages.map((p) => p.component || p.path))]
+    .sort()
+    .map((name) => `\`${name}\``)
+    .join(", ");
 }
 
 /** pendingCell is where the component's standing release PR already sits,

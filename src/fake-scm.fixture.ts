@@ -31,6 +31,13 @@ export interface FakeScmOptions {
   /** commits are the merge commits on the target branch, newest first, above
    * the release sentinel. Defaults to none. */
   commits?: Commit[];
+  /**
+   * files are the file contents on the target branch, keyed by repository
+   * path. Only what a strategy reads for itself needs to be here — a
+   * package.json, say, which is where `release-type: node` finds the
+   * component name a config that declares none leaves it to derive.
+   */
+  files?: Record<string, string>;
   configFile?: string;
   manifestFile?: string;
 }
@@ -79,8 +86,17 @@ export function fakeScm(options: FakeScmOptions): GitHub {
       for (const release of releases) yield { ...release, notes: "" };
     },
     async *tagIterator(): AsyncGenerator<never> {},
-    async getFileContentsOnBranch(path: string): Promise<never> {
-      throw Object.assign(new Error(`not found: ${path}`), { status: 404 });
+    async getFileContentsOnBranch(path: string): Promise<unknown> {
+      const content = options.files?.[path];
+      if (content === undefined) {
+        throw Object.assign(new Error(`not found: ${path}`), { status: 404 });
+      }
+      return {
+        sha: "",
+        mode: "100644",
+        content: Buffer.from(content, "utf8").toString("base64"),
+        parsedContent: content,
+      };
     },
     async findFilesByFilenameAndRef(): Promise<string[]> {
       return [];

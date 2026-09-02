@@ -7,6 +7,7 @@ import { bumpLevel, footer, render } from "./render.js";
 const API: PackageConfig = {
   path: "api",
   component: "acme-api",
+  releaseComponent: "acme-api",
   current: "2.4.1",
   separator: "@",
   includeComponent: true,
@@ -14,6 +15,7 @@ const API: PackageConfig = {
 const UI: PackageConfig = {
   path: "ui",
   component: "acme-ui",
+  releaseComponent: "acme-ui",
   current: "1.0.0",
   separator: "@",
   includeComponent: true,
