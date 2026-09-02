@@ -136,10 +136,17 @@ export interface ResolveOptions {
  * resolveTypes works out which types this repository's changelog recognizes.
  *
  * A config that declares `changelog-sections` has replaced the preset's
- * `types` wholesale, so the declared sections are the whole list rather than
- * an addition to it. Sections are unioned across the top level and every
- * package: a type any component renders is a type that can open a release, so
- * calling it hidden repository-wide would be wrong for that component.
+ * `types` wholesale, so the declared sections are the whole *visible* list
+ * rather than an addition to it. Sections are unioned across the top level
+ * and every package: a type any component renders is a type that can open a
+ * release, so calling it hidden repository-wide would be wrong for that
+ * component.
+ *
+ * What the sections do not narrow is `recognized`. A type they omit renders
+ * nothing, which is what hidden means; it does not stop being a commit type
+ * a contributor may legitimately write. Only the explicit `visible`/`hidden`
+ * overrides narrow that, because a caller passing them is describing their
+ * own title gate.
  */
 export function resolveTypes(options: ResolveOptions = {}): TypeSet {
   const prefix =
@@ -160,7 +167,21 @@ export function resolveTypes(options: ResolveOptions = {}): TypeSet {
     }
     if (declaredVisible.size + declaredHidden.size > 0) {
       visible = [...declaredVisible];
-      hidden = [...declaredHidden];
+      // A type the sections leave out is hidden, not unrecognized. The
+      // sections replace the preset's `types`, so it renders no changelog
+      // line and cannot open a release on its own -- but the parser still
+      // reads it and release-please still versions from it, so a title
+      // carrying it is a perfectly ordinary commit. Dropping it from
+      // `recognized` instead made `isMalformed` reject one: a repository
+      // declaring only feat/fix/perf sections got "None -- malformed PR
+      // title" on every `chore:` and `docs:` pull request it had.
+      hidden = [
+        ...new Set([
+          ...declaredHidden,
+          ...DEFAULT_TYPES.visible,
+          ...DEFAULT_TYPES.hidden,
+        ]),
+      ];
     }
   }
 

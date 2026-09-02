@@ -299,11 +299,12 @@ describe("a repository whose changelog recognizes other types", () => {
 
   it("names the recognized types when it withholds a projection", () => {
     const out = body(projection(), {
-      title: "feat: a thing",
+      title: "nonsense: a thing",
       malformed: true,
       types,
     });
-    expect(out).toContain("`ship`, `tidy`");
+    expect(out).toContain("`ship`");
+    expect(out).toContain("`tidy`");
   });
 });
 

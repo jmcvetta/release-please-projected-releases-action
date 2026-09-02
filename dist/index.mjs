@@ -61614,7 +61614,13 @@ function resolveTypes(options = {}) {
     }
     if (declaredVisible.size + declaredHidden.size > 0) {
       visible = [...declaredVisible];
-      hidden = [...declaredHidden];
+      hidden = [
+        .../* @__PURE__ */ new Set([
+          ...declaredHidden,
+          ...DEFAULT_TYPES.visible,
+          ...DEFAULT_TYPES.hidden
+        ])
+      ];
     }
   }
   if (options.visible) visible = [...options.visible];

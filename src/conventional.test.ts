@@ -102,10 +102,10 @@ describe("resolveTypes", () => {
     );
   });
 
-  it("takes a config's changelog-sections as the whole list", () => {
+  it("takes a config's changelog-sections as the whole visible list", () => {
     // Declaring `changelog-sections` replaces the preset's `types` rather
     // than adding to them, so a repository that declares three sections
-    // recognizes three types -- `perf` is no longer among them.
+    // renders three -- `perf` opens no release of its own here.
     const types = resolveTypes({
       config: {
         "changelog-sections": [
@@ -116,8 +116,28 @@ describe("resolveTypes", () => {
       },
     });
     expect([...types.visible].sort()).toEqual(["feat", "fix"]);
-    expect([...types.hidden]).toEqual(["chore"]);
-    expect(types.recognized.has("perf")).toBe(false);
+    expect(types.hidden.has("chore")).toBe(true);
+  });
+
+  it("leaves a type the sections omit recognized, and so mergeable", () => {
+    // The sections decide what the changelog renders, not what a commit may
+    // be. A type they omit is hidden -- it renders nothing and opens no
+    // release -- but it is still an ordinary Conventional Commit, and calling
+    // its title malformed put "None -- malformed PR title" on every `chore:`
+    // and `docs:` pull request in a repository that declared three sections.
+    const types = resolveTypes({
+      config: {
+        "changelog-sections": [
+          { type: "feat", section: "Features" },
+          { type: "fix", section: "Fixes" },
+        ],
+      },
+    });
+    expect(types.visible.has("perf")).toBe(false);
+    expect(types.hidden.has("perf")).toBe(true);
+    expect(isMalformed("chore: tidy", types)).toBe(false);
+    expect(isMalformed("docs: explain", types)).toBe(false);
+    expect(isMalformed("nonsense: it", types)).toBe(true);
   });
 
   it("unions the sections a package declares with the top-level ones", () => {

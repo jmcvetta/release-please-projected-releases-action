@@ -124,9 +124,19 @@ describe("buildComment", () => {
     expect(shipped).toContain("acme-api@v2.4.2");
     expect(shipped).toContain("### Shipped");
 
-    const rejected = await comment("feat: a thing", { config });
+    // `feat` is not one of the declared sections, so it renders nothing and
+    // releases nothing here. It is still an ordinary commit type, though:
+    // the parser reads it and release-please versions from it. Withholding
+    // the projection as malformed told the author to rewrite a title that was
+    // fine, on every `chore:` and `docs:` pull request such a repository has.
+    const quiet = await comment("feat: a thing", { config });
+    expect(quiet).toContain("`feat` is a hidden type");
+    expect(quiet).not.toContain("malformed PR title");
+
+    const rejected = await comment("nonsense: a thing", { config });
     expect(rejected).toContain("None — malformed PR title.");
-    expect(rejected).toContain("`ship`, `tidy`");
+    expect(rejected).toContain("`ship`");
+    expect(rejected).toContain("`tidy`");
   });
 
   it("warns that a Release-As footer was ignored", async () => {
