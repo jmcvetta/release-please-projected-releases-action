@@ -191,8 +191,18 @@ npm run check     # typecheck, test, build
 
 `dist/index.mjs` is committed, because a JavaScript action runs the file the
 caller checked out with no install step. CI rebuilds it and fails a pull
-request whose bundle is stale, and separately runs the bundle, because a
-broken bundle dies on load and every unit test runs against `src/`.
+request whose bundle is stale — and the build runs **before** the tests,
+because one of them runs the bundle.
+
+That one is `src/bundle.test.ts`, and it is the only test that covers what
+bundling breaks. It runs `dist/index.mjs` as a process against a fake GitHub
+served over real HTTP, and asserts the markdown that comes out. Everything
+else substitutes a `GitHub` object, which skips URL assembly, the Octokit
+clients, the changelog preset's own file reads, and the bundle entirely. Three
+bugs have lived in that gap — a `require` esbuild could not resolve, a GraphQL
+endpoint assembled as `/graphql/graphql`, and a changelog preset whose
+template files were not shipped — and the suite was green through all three.
+Each was reintroduced to confirm this test fails on it.
 
 The same bundle is the command line, dispatching on whether it was given any
 arguments, so a projection can be compared against the merge that follows it:

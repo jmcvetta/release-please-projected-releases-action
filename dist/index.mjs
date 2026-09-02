@@ -62547,6 +62547,10 @@ async function cli(argv2) {
       component: { type: "string" },
       "include-component-in-tag": { type: "boolean" },
       "tag-separator": { type: "string" },
+      // The changed-file list, supplied rather than diffed. For driving the
+      // tool where there is no checkout to diff -- a test, or a projection
+      // reconstructed after the fact from a merge's file list.
+      files: { type: "string" },
       "visible-types": { type: "string" },
       "hidden-types": { type: "string" },
       "api-url": { type: "string" },
@@ -62585,7 +62589,7 @@ async function cli(argv2) {
     base,
     headSha: values["head-sha"],
     headBranch: values["head-branch"],
-    files: changedFiles(values["diff-base"] || `origin/${base}`, values.head),
+    files: list(values.files) ?? changedFiles(values["diff-base"] || `origin/${base}`, values.head),
     repoRoot: values["repo-root"],
     configFile: values["config-file"],
     manifestFile: values["manifest-file"],
