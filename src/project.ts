@@ -14,9 +14,14 @@
  */
 
 import { Manifest } from "release-please";
-import type { GitHub, ReleasePullRequest, Strategy } from "release-please";
+import type {
+  GitHub,
+  ReleasePullRequest,
+  ReleaserConfig,
+  Strategy,
+} from "release-please";
 import { componentOfBranch } from "./conventional.js";
-import { splitFiles } from "./split.js";
+import { ROOT_PACKAGE_PATH, splitFiles } from "./split.js";
 import type { HeadOverrides, SyntheticCommit } from "./pr-view.js";
 import { viewWithPullRequest } from "./pr-view.js";
 
@@ -95,6 +100,70 @@ export function readPackages(
         includeComponent,
       };
     });
+}
+
+/**
+ * PlainConfig is release-please's non-manifest mode: one package, configured
+ * by the caller rather than by files in the repository.
+ *
+ * This is what `release-type:` on `release-please-action` selects, and it is
+ * how a single-package repository is normally released — there is no
+ * release-please-config.json or .release-please-manifest.json to read, so the
+ * projection cannot start from files. `Manifest.fromConfig` takes the same
+ * configuration directly, and is public surface like `fromManifest`.
+ */
+export interface PlainConfig extends ReleaserConfig {
+  /** path is the directory the single package covers. Defaults to the
+   * repository root, which is what a single-package repository means. */
+  path?: string;
+}
+
+/**
+ * plainPackage describes the one package a plain-mode repository has.
+ *
+ * `current` is left undefined here and filled from the manifest release-please
+ * builds: in plain mode the base version comes from the latest tag, which only
+ * release-please can resolve. `component` is likewise usually empty and filled
+ * by namePackages, since the strategy derives it (a `node` release takes the
+ * package.json name).
+ */
+export function plainPackage(config: PlainConfig): PackageConfig {
+  const component = config.component ?? "";
+  // Unlike manifest mode, this defaults to false: a repository releasing one
+  // package tags `v1.2.3`, not `name-v1.2.3`. That matches release-please's
+  // own default for `include-component-in-tag` outside a manifest.
+  const includeComponent = config.includeComponentInTag ?? false;
+  return {
+    path: config.path ?? ROOT_PACKAGE_PATH,
+    component,
+    releaseComponent: includeComponent ? component : "",
+    current: undefined,
+    separator: config.tagSeparator ?? "-",
+    includeComponent,
+  };
+}
+
+/**
+ * withReleasedVersions fills in each package's current version from the
+ * manifest release-please built.
+ *
+ * In manifest mode the version came from the manifest file and this changes
+ * nothing. In plain mode there is no such file: the base version is whatever
+ * the latest tag says, which release-please resolves while constructing the
+ * manifest and exposes as `releasedVersions`. Without it the "Current" column
+ * is blank and the bump cannot be named, since naming it compares the two
+ * versions.
+ */
+export function withReleasedVersions(
+  manifest: Manifest,
+  packages: readonly PackageConfig[],
+): PackageConfig[] {
+  const released = manifest.releasedVersions ?? {};
+  return packages.map((pkg) =>
+    pkg.current === undefined && released[pkg.path]
+      ? { ...pkg, current: released[pkg.path]!.toString() }
+      : pkg,
+  );
 }
 
 /**
@@ -250,6 +319,12 @@ export interface ProjectOptions {
   manifest: Record<string, string>;
   configFile?: string;
   manifestFile?: string;
+  /**
+   * plain selects release-please's non-manifest mode. When set, `config` and
+   * `manifest` are unused and the single package is configured from here
+   * instead — the same choice `release-type:` makes on release-please-action.
+   */
+  plain?: PlainConfig;
   /** releaseBranchPrefix is how release-please names its release branches,
    * which is how a candidate release is attributed to a component. */
   releaseBranchPrefix?: string;
@@ -348,37 +423,57 @@ export function releaseAsNotes(body: string): ReleaseAsNotes {
 export async function project(options: ProjectOptions): Promise<Projection> {
   const configFile = options.configFile ?? DEFAULT_CONFIG_FILE;
   const manifestFile = options.manifestFile ?? DEFAULT_MANIFEST_FILE;
-  const declared = readPackages(options.config, options.manifest);
-  const overrides: HeadOverrides = {
-    [configFile]: options.config,
-    [manifestFile]: options.manifest,
-  };
+  const plain = options.plain;
+  const declared = plain
+    ? [plainPackage(plain)]
+    : readPackages(options.config, options.manifest);
+
+  // Plain mode reads no files, so there is nothing to serve from the head:
+  // the configuration came from the caller, and a branch cannot change it the
+  // way it can change a checked-in release-please-config.json.
+  const overrides: HeadOverrides = plain
+    ? {}
+    : {
+        [configFile]: options.config,
+        [manifestFile]: options.manifest,
+      };
+
+  /** build makes a Manifest the way this repository is configured. Both
+   * statics are release-please's public surface. */
+  const build = (github: GitHub): Promise<Manifest> =>
+    plain
+      ? Manifest.fromConfig(
+          github,
+          options.commit.baseBranch,
+          plain,
+          {},
+          plain.path ?? ROOT_PACKAGE_PATH,
+        )
+      : Manifest.fromManifest(
+          github,
+          options.commit.baseBranch,
+          configFile,
+          manifestFile,
+        );
 
   const view = viewWithPullRequest(
     options.github,
     options.commit,
     overrides,
   );
-  const withPr = await Manifest.fromManifest(
-    view.github,
-    options.commit.baseBranch,
-    configFile,
-    manifestFile,
-  );
+  const withPr = await build(view.github);
   const prefix = options.releaseBranchPrefix;
   const projected = toReleases(await withPr.buildPullRequests(), prefix);
   view.assertConsulted();
 
   // After the pull requests are built, so the strategies this reads are the
   // ones release-please has already constructed and cached.
-  const packages = await namePackages(withPr, declared);
-
-  const withoutPr = await Manifest.fromManifest(
-    options.github,
-    options.commit.baseBranch,
-    configFile,
-    manifestFile,
+  const packages = withReleasedVersions(
+    withPr,
+    await namePackages(withPr, declared),
   );
+
+  const withoutPr = await build(options.github);
   const pending = toReleases(await withoutPr.buildPullRequests(), prefix);
 
   const touched = splitFiles(

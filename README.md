@@ -89,13 +89,13 @@ projecting the wrong thing — including the narrower case where a repository
 squashes but is set to `COMMIT_OR_PR_TITLE`, which takes the subject from the
 branch's only commit when the branch has one.
 
-**Manifest mode.** It reads `release-please-config.json` and
-`.release-please-manifest.json` from the checkout, so a repository using
-release-please's plain mode — `release-type:` on the action, with no config or
-manifest on disk — has nothing for it to read. That is not a deep limitation,
-just an unimplemented one: the same projection would work from the action
-inputs release-please itself takes. This repository releases that way, which
-is why it does not run this action on its own pull requests.
+**Either release-please mode.** With a `release-please-config.json` and
+`.release-please-manifest.json` in the checkout it reads those. Without them —
+release-please's plain mode, one package selected by `release-type:` — set the
+same `release-type` here and it configures the projection from the inputs
+instead, through `Manifest.fromConfig`. There is no manifest naming the
+current version in that mode, so it comes from the latest tag, which
+release-please resolves.
 
 **Nothing else.** Components, tag separators, `changelog-sections`, aggregated
 or separate release pull requests, prerelease versions, `Release-As` — all of
@@ -114,7 +114,8 @@ these are the ones worth knowing about.
 | `changed-files` | `auto` | `auto` diffs the checkout and falls back to the API when the checkout is too shallow; `git` insists; `api` skips the checkout entirely. |
 | `merge-method` | `auto` | `auto` reads the repository's settings. Set it to skip that read. |
 | `visible-types` / `hidden-types` | resolved | Force the changelog type list, when the config's `changelog-sections` do not describe it. |
-| `config-file` / `manifest-file` | release-please's | Where the config and manifest live. |
+| `config-file` / `manifest-file` | release-please's | Where the config and manifest live, in manifest mode. |
+| `release-type` | _unset_ | Set it for plain mode: one package, no config or manifest on disk. `package-path`, `component`, `include-component-in-tag` and `tag-separator` go with it. |
 | `comment-header` | `projected-releases` | Identifies the sticky comment. Change it only to keep two invocations from editing each other's. |
 
 ## Outputs
@@ -211,6 +212,12 @@ Reading the source produced both errors; running it produced both corrections.
 So the tests measure behaviour rather than restate source.
 
 ## Releasing
+
+This repository runs the action on its own pull requests
+(`.github/workflows/projected-releases.yml`), through `uses: ./` so the
+projection a pull request shows comes from that pull request's own code. It is
+released in plain mode, so that workflow is also the standing test that plain
+mode works.
 
 release-please, in its plain single-package mode: `.github/workflows/release-please.yml`
 passes `release-type: node` and there is no `release-please-config.json` or

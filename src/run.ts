@@ -15,7 +15,7 @@ import type { GitHub as GitHubType } from "release-please";
 import { isMalformed, resolveTypes } from "./conventional.js";
 import type { TypeSet } from "./conventional.js";
 import { project, DEFAULT_CONFIG_FILE, DEFAULT_MANIFEST_FILE } from "./project.js";
-import type { Projection } from "./project.js";
+import type { PlainConfig, Projection } from "./project.js";
 import { render } from "./render.js";
 
 /** EMPTY is the projection rendered when the title is withheld from one. */
@@ -54,6 +54,12 @@ export interface RunOptions {
   files: string[];
   /** repoRoot is the checkout the config and manifest are read from. */
   repoRoot?: string;
+  /**
+   * plain selects release-please's non-manifest mode: one package configured
+   * here rather than by a release-please-config.json in the checkout. Nothing
+   * is read from disk when it is set.
+   */
+  plain?: PlainConfig | undefined;
   configFile?: string;
   manifestFile?: string;
   /** releasePrs maps a component to its standing release pull request URL. */
@@ -128,11 +134,21 @@ export async function buildComment(options: RunOptions): Promise<Outcome> {
       unknown
     >;
 
-  const config = readJson(configFile);
-  const manifest = readJson(manifestFile) as Record<string, string>;
+  // Plain mode has no files to read. The empty objects stand in so the rest
+  // of the pipeline keeps one shape; `project` ignores them when `plain` is
+  // set.
+  const config = options.plain ? {} : readJson(configFile);
+  const manifest = options.plain
+    ? {}
+    : (readJson(manifestFile) as Record<string, string>);
 
   const types = resolveTypes({
-    config,
+    // A plain-mode caller declares its changelog sections on the releaser
+    // config rather than in a file, and they mean the same thing: the
+    // types this repository's changelog recognizes.
+    config: options.plain?.changelogSections
+      ? { "changelog-sections": options.plain.changelogSections }
+      : config,
     ...(options.typeOverrides?.visible
       ? { visible: options.typeOverrides.visible }
       : {}),
@@ -196,6 +212,7 @@ async function projectPullRequest(
     configFile: files.configFile,
     manifestFile: files.manifestFile,
     releaseBranchPrefix: files.releaseBranchPrefix,
+    ...(options.plain ? { plain: options.plain } : {}),
     commit: {
       title: options.title,
       body: options.body,

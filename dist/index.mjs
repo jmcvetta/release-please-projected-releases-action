@@ -49934,10 +49934,10 @@ var require_factory = __commonJS({
       delete releasers[name2];
     }
     exports2.unregisterReleaseType = unregisterReleaseType;
-    function getReleaserTypes() {
+    function getReleaserTypes2() {
       return Object.keys(releasers).sort();
     }
-    exports2.getReleaserTypes = getReleaserTypes;
+    exports2.getReleaserTypes = getReleaserTypes2;
   }
 });
 
@@ -61746,6 +61746,24 @@ function readPackages(config, manifest) {
     };
   });
 }
+function plainPackage(config) {
+  const component = config.component ?? "";
+  const includeComponent = config.includeComponentInTag ?? false;
+  return {
+    path: config.path ?? ROOT_PACKAGE_PATH,
+    component,
+    releaseComponent: includeComponent ? component : "",
+    current: void 0,
+    separator: config.tagSeparator ?? "-",
+    includeComponent
+  };
+}
+function withReleasedVersions(manifest, packages) {
+  const released = manifest.releasedVersions ?? {};
+  return packages.map(
+    (pkg) => pkg.current === void 0 && released[pkg.path] ? { ...pkg, current: released[pkg.path].toString() } : pkg
+  );
+}
 async function namePackages(manifest, packages) {
   const build = manifest.getStrategiesByPath;
   if (typeof build !== "function") return [...packages];
@@ -61827,32 +61845,38 @@ function releaseAsNotes(body) {
 async function project(options) {
   const configFile = options.configFile ?? DEFAULT_CONFIG_FILE;
   const manifestFile = options.manifestFile ?? DEFAULT_MANIFEST_FILE;
-  const declared = readPackages(options.config, options.manifest);
-  const overrides = {
+  const plain = options.plain;
+  const declared = plain ? [plainPackage(plain)] : readPackages(options.config, options.manifest);
+  const overrides = plain ? {} : {
     [configFile]: options.config,
     [manifestFile]: options.manifest
   };
+  const build = (github) => plain ? import_release_please.Manifest.fromConfig(
+    github,
+    options.commit.baseBranch,
+    plain,
+    {},
+    plain.path ?? ROOT_PACKAGE_PATH
+  ) : import_release_please.Manifest.fromManifest(
+    github,
+    options.commit.baseBranch,
+    configFile,
+    manifestFile
+  );
   const view = viewWithPullRequest(
     options.github,
     options.commit,
     overrides
   );
-  const withPr = await import_release_please.Manifest.fromManifest(
-    view.github,
-    options.commit.baseBranch,
-    configFile,
-    manifestFile
-  );
+  const withPr = await build(view.github);
   const prefix = options.releaseBranchPrefix;
   const projected = toReleases(await withPr.buildPullRequests(), prefix);
   view.assertConsulted();
-  const packages = await namePackages(withPr, declared);
-  const withoutPr = await import_release_please.Manifest.fromManifest(
-    options.github,
-    options.commit.baseBranch,
-    configFile,
-    manifestFile
+  const packages = withReleasedVersions(
+    withPr,
+    await namePackages(withPr, declared)
   );
+  const withoutPr = await build(options.github);
   const pending = toReleases(await withoutPr.buildPullRequests(), prefix);
   const touched = splitFiles(
     options.commit.files,
@@ -61872,6 +61896,9 @@ async function project(options) {
     ...ignoredReleaseAs ? { ignoredReleaseAs } : {}
   };
 }
+
+// src/action.ts
+var import_release_please3 = __toESM(require_src2(), 1);
 
 // src/release-prs.ts
 function indexReleasePrs(prs, prefix = DEFAULT_TYPES.releaseBranchPrefix) {
@@ -62161,10 +62188,13 @@ async function buildComment(options) {
   const configFile = options.configFile ?? DEFAULT_CONFIG_FILE;
   const manifestFile = options.manifestFile ?? DEFAULT_MANIFEST_FILE;
   const readJson = (path) => JSON.parse(readFileSync2(resolve(root, path), "utf8"));
-  const config = readJson(configFile);
-  const manifest = readJson(manifestFile);
+  const config = options.plain ? {} : readJson(configFile);
+  const manifest = options.plain ? {} : readJson(manifestFile);
   const types = resolveTypes({
-    config,
+    // A plain-mode caller declares its changelog sections on the releaser
+    // config rather than in a file, and they mean the same thing: the
+    // types this repository's changelog recognizes.
+    config: options.plain?.changelogSections ? { "changelog-sections": options.plain.changelogSections } : config,
     ...options.typeOverrides?.visible ? { visible: options.typeOverrides.visible } : {},
     ...options.typeOverrides?.hidden ? { hidden: options.typeOverrides.hidden } : {},
     ...options.releaseBranchPrefix ? { releaseBranchPrefix: options.releaseBranchPrefix } : {}
@@ -62203,6 +62233,7 @@ async function projectPullRequest(options, config, manifest, files) {
     configFile: files.configFile,
     manifestFile: files.manifestFile,
     releaseBranchPrefix: files.releaseBranchPrefix,
+    ...options.plain ? { plain: options.plain } : {},
     commit: {
       title: options.title,
       body: options.body,
@@ -62350,6 +62381,7 @@ async function action(env = process.env) {
     headBranch,
     files,
     repoRoot: inputOr("repo-root", ".", env),
+    ...plainConfig(env) ? { plain: plainConfig(env) } : {},
     configFile: inputOr("config-file", DEFAULT_CONFIG_FILE, env),
     manifestFile: inputOr("manifest-file", DEFAULT_MANIFEST_FILE, env),
     releasePrs,
@@ -62390,6 +62422,26 @@ async function post(client, number, header, body) {
     }
     throw error;
   }
+}
+function plainConfig(env) {
+  const releaseType = input("release-type", env);
+  if (!releaseType) return void 0;
+  const known = (0, import_release_please3.getReleaserTypes)();
+  if (!known.includes(releaseType)) {
+    throw new Error(
+      `input \`release-type\` must be one of ${[...known].sort().join(", ")}; got \`${releaseType}\``
+    );
+  }
+  const path = input("package-path", env);
+  const component = input("component", env);
+  const separator = input("tag-separator", env);
+  return {
+    releaseType,
+    ...path ? { path } : {},
+    ...component ? { component } : {},
+    ...separator ? { tagSeparator: separator } : {},
+    ...input("include-component-in-tag", env) ? { includeComponentInTag: boolInput("include-component-in-tag", false, env) } : {}
+  };
 }
 function typeOverrides(env) {
   const visible = listInput("visible-types", env);
@@ -62481,6 +62533,13 @@ async function cli(argv2) {
       "manifest-file": { type: "string", default: DEFAULT_MANIFEST_FILE },
       "release-prs": { type: "string" },
       "release-branch-prefix": { type: "string" },
+      // Plain mode: one package, configured here, no config or manifest file
+      // in the checkout. Mirrors the action inputs of the same names.
+      "release-type": { type: "string" },
+      "package-path": { type: "string" },
+      component: { type: "string" },
+      "include-component-in-tag": { type: "boolean" },
+      "tag-separator": { type: "string" },
       "visible-types": { type: "string" },
       "hidden-types": { type: "string" },
       "api-url": { type: "string" },
@@ -62501,6 +62560,14 @@ async function cli(argv2) {
   const list = (value) => value ? value.split(/[\s,]+/).filter(Boolean) : void 0;
   const visible = list(values["visible-types"]);
   const hidden = list(values["hidden-types"]);
+  const releaseType = values["release-type"];
+  const plain = releaseType ? {
+    releaseType,
+    ...values["package-path"] ? { path: values["package-path"] } : {},
+    ...values.component ? { component: values.component } : {},
+    ...values["tag-separator"] ? { tagSeparator: values["tag-separator"] } : {},
+    ...values["include-component-in-tag"] ? { includeComponentInTag: true } : {}
+  } : void 0;
   const outcome = await buildComment({
     owner,
     repo: name2,
@@ -62522,6 +62589,7 @@ async function cli(argv2) {
     runUrl: values["run-url"],
     ...visible || hidden ? { typeOverrides: { ...visible ? { visible } : {}, ...hidden ? { hidden } : {} } } : {},
     ...values["release-branch-prefix"] ? { releaseBranchPrefix: values["release-branch-prefix"] } : {},
+    ...plain ? { plain } : {},
     ...values["api-url"] ? { apiUrl: values["api-url"] } : {},
     ...values["graphql-url"] ? { graphqlUrl: values["graphql-url"] } : {}
   });

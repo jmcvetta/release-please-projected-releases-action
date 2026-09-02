@@ -13,6 +13,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { changedFiles } from "./git.js";
 import { DEFAULT_CONFIG_FILE, DEFAULT_MANIFEST_FILE } from "./project.js";
+import type { PlainConfig } from "./project.js";
 import { loadReleasePrs } from "./release-prs.js";
 import { buildComment, quietLogger } from "./run.js";
 
@@ -43,6 +44,13 @@ export async function cli(argv: string[]): Promise<void> {
       "manifest-file": { type: "string", default: DEFAULT_MANIFEST_FILE },
       "release-prs": { type: "string" },
       "release-branch-prefix": { type: "string" },
+      // Plain mode: one package, configured here, no config or manifest file
+      // in the checkout. Mirrors the action inputs of the same names.
+      "release-type": { type: "string" },
+      "package-path": { type: "string" },
+      component: { type: "string" },
+      "include-component-in-tag": { type: "boolean" },
+      "tag-separator": { type: "string" },
       "visible-types": { type: "string" },
       "hidden-types": { type: "string" },
       "api-url": { type: "string" },
@@ -67,6 +75,21 @@ export async function cli(argv: string[]): Promise<void> {
     value ? value.split(/[\s,]+/).filter(Boolean) : undefined;
   const visible = list(values["visible-types"]);
   const hidden = list(values["hidden-types"]);
+
+  const releaseType = values["release-type"];
+  const plain: PlainConfig | undefined = releaseType
+    ? {
+        releaseType: releaseType as PlainConfig["releaseType"],
+        ...(values["package-path"] ? { path: values["package-path"] } : {}),
+        ...(values.component ? { component: values.component } : {}),
+        ...(values["tag-separator"]
+          ? { tagSeparator: values["tag-separator"] }
+          : {}),
+        ...(values["include-component-in-tag"]
+          ? { includeComponentInTag: true }
+          : {}),
+      }
+    : undefined;
 
   const outcome = await buildComment({
     owner,
@@ -95,6 +118,7 @@ export async function cli(argv: string[]): Promise<void> {
     ...(values["release-branch-prefix"]
       ? { releaseBranchPrefix: values["release-branch-prefix"] }
       : {}),
+    ...(plain ? { plain } : {}),
     ...(values["api-url"] ? { apiUrl: values["api-url"] } : {}),
     ...(values["graphql-url"] ? { graphqlUrl: values["graphql-url"] } : {}),
   });

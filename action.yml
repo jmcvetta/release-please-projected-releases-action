@@ -92,6 +92,41 @@ inputs:
     required: false
     default: "."
 
+  release-type:
+    description: >-
+      Set this for a repository release-please runs WITHOUT a manifest --
+      `release-type:` on release-please-action, no release-please-config.json
+      and no .release-please-manifest.json. One package, configured here
+      rather than read from the checkout, so `config-file`, `manifest-file`
+      and `repo-root` are unused. Values are release-please's own release
+      types (`node`, `python`, `simple`, ...). Leave empty for manifest mode.
+    required: false
+    default: ""
+  package-path:
+    description: >-
+      Directory the single package covers, with `release-type`. Defaults to
+      the repository root, which is what a single-package repository means.
+    required: false
+    default: ""
+  component:
+    description: >-
+      Component name for the single package, with `release-type`. Usually
+      unnecessary: the release type derives one (a `node` release takes the
+      package.json name) and this action asks release-please for it.
+    required: false
+    default: ""
+  include-component-in-tag:
+    description: >-
+      Whether the single package's tags carry its component, with
+      `release-type`. Defaults to false, so a single-package repository tags
+      `v1.2.3` rather than `name-v1.2.3`.
+    required: false
+    default: ""
+  tag-separator:
+    description: What separates component from version in a tag, with `release-type`.
+    required: false
+    default: ""
+
   visible-types:
     description: >-
       Commit types that render a changelog line, and so can open a release,
