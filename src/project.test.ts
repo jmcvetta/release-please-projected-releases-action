@@ -359,3 +359,62 @@ describe("the release sentinel", () => {
     expect(projection.projected).toEqual([]);
   });
 });
+
+describe("a repository that does not separate its release pull requests", () => {
+  // `separate-pull-requests: true` is what jmcvetta/career runs and what the
+  // tests above assume; it is not release-please's default. Without it every
+  // component with pending changes is aggregated into one pull request
+  // carrying one `releaseData` entry each, on a branch with no
+  // `--components--` segment. Reading only the branch there would report a
+  // single release for a merge that cuts two tags.
+  const CONFIG_AGGREGATED = {
+    packages: {
+      api: {
+        "release-type": "simple",
+        component: "acme-api",
+        "include-component-in-tag": true,
+        "tag-separator": "@",
+      },
+      ui: {
+        "release-type": "simple",
+        component: "acme-ui",
+        "include-component-in-tag": true,
+        "tag-separator": "@",
+      },
+    },
+  };
+
+  async function aggregated(title: string, files: string[]): Promise<Projection> {
+    return project({
+      github: fakeScm({ config: CONFIG_AGGREGATED, manifest: MANIFEST }),
+      config: CONFIG_AGGREGATED,
+      manifest: MANIFEST,
+      commit: {
+        title,
+        body: "",
+        files,
+        number: 7,
+        headSha: "abcdef1234567890",
+        headBranch: "topic",
+        baseBranch: "master",
+      },
+    });
+  }
+
+  it("reports one release per component the merge would tag", async () => {
+    const p = await aggregated("feat: a thing", ["api/src/x.ts", "ui/src/y.ts"]);
+    expect(versions(p)).toEqual({ "acme-api": "2.5.0", "acme-ui": "1.1.0" });
+  });
+
+  it("keeps each component's own notes with it", async () => {
+    const p = await aggregated("fix: a thing", ["api/src/x.ts", "ui/src/y.ts"]);
+    const api = p.projected.find((r) => r.component === "acme-api");
+    expect(api?.notes).toContain("a thing");
+    expect(p.projected).toHaveLength(2);
+  });
+
+  it("still reports a single-component release from the one entry", async () => {
+    const p = await aggregated("feat: a thing", ["api/src/x.ts"]);
+    expect(versions(p)).toEqual({ "acme-api": "2.5.0" });
+  });
+});

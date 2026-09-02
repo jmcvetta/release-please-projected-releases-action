@@ -7,7 +7,8 @@
  * than left as silence.
  */
 
-import { VISIBLE_TYPES, titleType } from "./conventional.js";
+import { DEFAULT_TYPES, titleType } from "./conventional.js";
+import type { TypeSet } from "./conventional.js";
 import type { PackageConfig, Projection, Release } from "./project.js";
 import { tagFor } from "./project.js";
 
@@ -23,6 +24,15 @@ export interface RenderOptions {
   headSha?: string;
   /** runUrl is this workflow run, linked from the footer. */
   runUrl?: string;
+  /** types is the resolved changelog type list, which decides what "visible"
+   * means for this repository. Defaults to the conventionalcommits preset. */
+  types?: TypeSet;
+  /**
+   * advisories are warnings the caller found that the projection itself
+   * cannot see — chiefly that the repository will not build the merge commit
+   * this preview assumes. Rendered with the projection's own warnings.
+   */
+  advisories?: readonly string[];
   /** now is the render time; injected so the footer is testable. */
   now?: Date;
 }
@@ -30,7 +40,8 @@ export interface RenderOptions {
 /** visibleTitle reports whether the pull request title's type is one that
  * renders a changelog line, and so can open a release on its own. */
 function visibleTitle(options: RenderOptions): boolean {
-  return VISIBLE_TYPES.has(titleType(options.title) ?? "");
+  const types = options.types ?? DEFAULT_TYPES;
+  return types.visible.has(titleType(options.title) ?? "");
 }
 
 /** Row is one component's line in the table. */
@@ -88,6 +99,11 @@ export function footer(options: RenderOptions): string {
  * problem here.
  */
 function renderWithheld(options: RenderOptions): string[] {
+  const types = options.types ?? DEFAULT_TYPES;
+  const recognized = [...types.recognized]
+    .sort()
+    .map((t) => `\`${t}\``)
+    .join(", ");
   return [
     "## Projected releases",
     "",
@@ -96,7 +112,8 @@ function renderWithheld(options: RenderOptions): string[] {
     `> ${options.title}`,
     "",
     "Titles must be [Conventional Commits](https://www.conventionalcommits.org/)" +
-      " format, with a lowercase type from the list the changelog recognizes.",
+      " format, with a lowercase type the changelog recognizes:" +
+      ` ${recognized}.`,
   ];
 }
 
@@ -108,7 +125,14 @@ export function render(
   options: RenderOptions,
 ): string {
   const lines = options.malformed
-    ? renderWithheld(options)
+    ? [
+        ...renderWithheld(options),
+        // Advisories survive a withheld projection: "this repository does not
+        // squash-merge" is as true of a malformed title as of a good one, and
+        // it is the note most likely to explain why the whole comment is
+        // beside the point.
+        ...(options.advisories?.length ? ["", ...options.advisories] : []),
+      ]
     : renderProjection(projection, options);
   return [...lines, "", footer(options)].join("\n") + "\n";
 }
@@ -202,7 +226,8 @@ function none(
     return [line];
   }
 
-  const visible = [...VISIBLE_TYPES].sort().map((t) => `\`${t}\``).join(", ");
+  const types = options.types ?? DEFAULT_TYPES;
+  const visible = [...types.visible].sort().map((t) => `\`${t}\``).join(", ");
   const type = titleType(options.title) ?? "";
   // A visible type reaching here is not the ordinary case -- release-please
   // attributes files itself, so it can project nothing for a component this
@@ -274,7 +299,7 @@ function warn(
   moved: Row[],
   unmoved: Row[],
 ): string[] {
-  const warnings: string[] = [];
+  const warnings: string[] = [...(options.advisories ?? [])];
   if (projection.ignoredReleaseAs) {
     warnings.push(
       `- \`Release-As: ${projection.ignoredReleaseAs}\` was **ignored** —` +

@@ -92,20 +92,50 @@ export interface Release {
 
 /**
  * toReleases reads release-please's candidate release pull requests into the
- * flat form the comment renders. The component comes from the branch name,
- * which release-please derives from the base branch and component, with the
- * release body as a fallback for a single-component repository.
+ * flat form the comment renders.
+ *
+ * One pull request is not one release. Under `separate-pull-requests: true`
+ * it is, and the component comes from the branch name, which release-please
+ * derives from the base branch and component. The default aggregates every
+ * component with pending changes into a single pull request instead: one
+ * `releaseData` entry per component, on a branch naming none of them, and no
+ * version on the pull request itself. Reading only the branch there would
+ * report one release for a merge that cuts several tags, or none at all.
+ *
+ * So the entries decide whenever they can — they carry both the component and
+ * the version — and the pull request's own version is the fallback for the
+ * separate case, where it is the authoritative one.
  */
-export function toReleases(prs: readonly ReleasePullRequest[]): Release[] {
+export function toReleases(
+  prs: readonly ReleasePullRequest[],
+  releaseBranchPrefix?: string,
+): Release[] {
   const releases: Release[] = [];
   for (const pr of prs) {
+    const data = pr.body.releaseData;
+    const branchComponent = componentOfBranch(pr.headRefName, releaseBranchPrefix);
+    const entries = data.flatMap((entry) => {
+      const version = entry.version?.toString();
+      return version
+        ? [
+            {
+              component: entry.component ?? branchComponent ?? "",
+              version,
+              notes: entry.notes.trim(),
+            },
+          ]
+        : [];
+    });
+
+    if (entries.length > 1 || (entries.length === 1 && !pr.version)) {
+      releases.push(...entries);
+      continue;
+    }
+
     const version = pr.version?.toString();
     if (!version) continue;
-    const data = pr.body.releaseData;
-    const component =
-      componentOfBranch(pr.headRefName) ?? data[0]?.component ?? "";
     releases.push({
-      component,
+      component: branchComponent ?? data[0]?.component ?? "",
       version,
       notes: data
         .map((d) => d.notes.trim())
@@ -149,6 +179,9 @@ export interface ProjectOptions {
   manifest: Record<string, string>;
   configFile?: string;
   manifestFile?: string;
+  /** releaseBranchPrefix is how release-please names its release branches,
+   * which is how a candidate release is attributed to a component. */
+  releaseBranchPrefix?: string;
 }
 
 // A `Release-As:` note on a line of its own. The key is matched
@@ -262,7 +295,8 @@ export async function project(options: ProjectOptions): Promise<Projection> {
     configFile,
     manifestFile,
   );
-  const projected = toReleases(await withPr.buildPullRequests());
+  const prefix = options.releaseBranchPrefix;
+  const projected = toReleases(await withPr.buildPullRequests(), prefix);
   view.assertConsulted();
 
   const withoutPr = await Manifest.fromManifest(
@@ -271,7 +305,7 @@ export async function project(options: ProjectOptions): Promise<Projection> {
     configFile,
     manifestFile,
   );
-  const pending = toReleases(await withoutPr.buildPullRequests());
+  const pending = toReleases(await withoutPr.buildPullRequests(), prefix);
 
   const touched = splitFiles(
     options.commit.files,

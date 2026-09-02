@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolveTypes } from "./conventional.js";
 import type { PackageConfig, Projection } from "./project.js";
 import { tagFor } from "./project.js";
 import { bumpLevel, footer, render } from "./render.js";
@@ -226,5 +227,54 @@ describe("the footer", () => {
       runUrl: "https://example.test/run/1",
     });
     expect(out).toContain("[re-rendered 2026-09-01 12:00 UTC](https://example.test/run/1)");
+  });
+});
+
+describe("advisories", () => {
+  const advisory = "- this repository does not squash-merge";
+
+  it("renders alongside the projection's own warnings", () => {
+    const out = body(projection(), { advisories: [advisory] });
+    expect(out).toContain(advisory);
+  });
+
+  it("survives a withheld projection", () => {
+    // "this repository does not squash-merge" is as true of a malformed
+    // title as of a good one, and it is the note most likely to explain why
+    // the whole comment is beside the point.
+    const out = body(projection(), {
+      title: "WIP whatever",
+      malformed: true,
+      advisories: [advisory],
+    });
+    expect(out).toContain("malformed PR title");
+    expect(out).toContain(advisory);
+  });
+});
+
+describe("a repository whose changelog recognizes other types", () => {
+  const types = resolveTypes({
+    config: {
+      "changelog-sections": [
+        { type: "ship", section: "Shipped" },
+        { type: "tidy", section: "Tidying", hidden: true },
+      ],
+    },
+  });
+
+  it("explains a hidden type against that repository's visible list", () => {
+    const out = body(projection(), { title: "tidy: sweep up", types });
+    expect(out).toContain("`tidy` is a hidden type");
+    expect(out).toContain("Only `ship` open a release.");
+    expect(out).not.toContain("`feat`");
+  });
+
+  it("names the recognized types when it withholds a projection", () => {
+    const out = body(projection(), {
+      title: "feat: a thing",
+      malformed: true,
+      types,
+    });
+    expect(out).toContain("`ship`, `tidy`");
   });
 });
