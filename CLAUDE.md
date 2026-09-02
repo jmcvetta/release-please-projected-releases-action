@@ -6,6 +6,16 @@ for the things that are easy to get wrong twice.
 
 ---
 
+## Everything reaches `master` through a pull request
+
+**Never push to `master`. Never offer to.** Not for a one-line fix, not to
+correct a bad merge, not because a change is documentation only, and not
+because pushing directly would dodge some problem with the merge -- that last
+one is the tempting case and it is still no.
+
+`master` is not branch-protected here, so nothing stops it. That makes this a
+rule rather than a mechanism, and the rule is absolute.
+
 ## Writing a pull request description
 
 **The description becomes the squash commit body and stays in the history
