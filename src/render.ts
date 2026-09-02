@@ -258,11 +258,39 @@ function nameList(packages: readonly PackageConfig[]): string {
     .join(", ");
 }
 
+/**
+ * releasePrUrl finds the standing release pull request holding a component's
+ * pending version.
+ *
+ * The index is keyed by the component in the release branch's name, which is
+ * the component release-please knows the package by. Under its *default*
+ * `separate-pull-requests: false` there is no such segment: one pull request
+ * aggregates every component, on a branch naming none of them, and it indexes
+ * under the empty string. Looking a real component up in that index finds
+ * nothing, which is how this feature came to cost an API call per run and
+ * link nothing at all for the ordinary configuration.
+ *
+ * The empty key is only read as "the pull request for everything" when it is
+ * the whole index. A repository that does separate its release pull requests
+ * can have one keyed empty too — a root package that keeps its component out
+ * of its branch name — and that one belongs to that package alone.
+ */
+function releasePrUrl(
+  component: string,
+  options: RenderOptions,
+): string | undefined {
+  const prs = options.releasePrs;
+  if (!prs || prs.size === 0) return undefined;
+  const own = prs.get(component);
+  if (own) return own;
+  return prs.size === 1 ? prs.get("") : undefined;
+}
+
 /** pendingCell is where the component's standing release PR already sits,
  * this pull request excluded, linked to that PR when one is open. */
 function pendingCell(row: Row, options: RenderOptions): string {
   if (!row.pending) return "—";
-  const url = options.releasePrs?.get(row.pkg.component);
+  const url = releasePrUrl(row.pkg.component, options);
   return url ? `[${row.pending.version}](${url})` : row.pending.version;
 }
 
@@ -296,7 +324,7 @@ function basis(moved: Row[], projection: Projection): string {
  * for a `feat:` is wrong.
  */
 function unmovedNote(row: Row, options: RenderOptions): string {
-  const url = options.releasePrs?.get(row.pkg.component);
+  const url = releasePrUrl(row.pkg.component, options);
   const version = row.projected.version;
   const where = url ? `[${version}](${url})` : version;
   const what = visibleTitle(options)

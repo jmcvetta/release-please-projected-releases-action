@@ -61999,9 +61999,16 @@ function none(projection, options, touched) {
 function nameList(packages) {
   return [...new Set(packages.map((p) => p.component || p.path))].sort().map((name2) => `\`${name2}\``).join(", ");
 }
+function releasePrUrl(component, options) {
+  const prs = options.releasePrs;
+  if (!prs || prs.size === 0) return void 0;
+  const own = prs.get(component);
+  if (own) return own;
+  return prs.size === 1 ? prs.get("") : void 0;
+}
 function pendingCell(row, options) {
   if (!row.pending) return "\u2014";
-  const url = options.releasePrs?.get(row.pkg.component);
+  const url = releasePrUrl(row.pkg.component, options);
   return url ? `[${row.pending.version}](${url})` : row.pending.version;
 }
 function basis(moved, projection) {
@@ -62019,7 +62026,7 @@ function basis(moved, projection) {
   return `${levels.join(" / ")} bump.`;
 }
 function unmovedNote(row, options) {
-  const url = options.releasePrs?.get(row.pkg.component);
+  const url = releasePrUrl(row.pkg.component, options);
   const version = row.projected.version;
   const where = url ? `[${version}](${url})` : version;
   const what = visibleTitle(options) ? " this PR adds a changelog line to it, not a version." : " this PR does not move it.";
