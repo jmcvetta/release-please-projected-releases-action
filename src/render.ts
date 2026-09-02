@@ -24,6 +24,9 @@ export interface RenderOptions {
   headSha?: string;
   /** runUrl is this workflow run, linked from the footer. */
   runUrl?: string;
+  /** base is the branch the pull request targets, named when explaining what
+   * that branch already releases on its own. */
+  base?: string;
   /** types is the resolved changelog type list, which decides what "visible"
    * means for this repository. Defaults to the conventionalcommits preset. */
   types?: TypeSet;
@@ -194,7 +197,7 @@ function renderProjection(
     );
   } else {
     out.push(
-      "| Component | Tag | Current | Pending | Projected |",
+      "| Component | Tag | Current | Without this PR | Projected |",
       "| --- | --- | --- | --- | --- |",
     );
     for (const row of moved) {
@@ -392,11 +395,30 @@ function basis(moved: Row[], projection: Projection): string {
 function unmovedNote(row: Row, options: RenderOptions): string {
   const url = releasePrUrl(row.pkg.component, options);
   const version = row.projected.version;
-  const where = url ? `[${version}](${url})` : version;
   const what = visibleTitle(options)
     ? " this PR adds a changelog line to it, not a version."
     : " this PR does not move it.";
-  return `- \`${row.pkg.component}\` stays at ${where}, already pending;${what}`;
+
+  // "Already pending" asserts that a release pull request is standing, which
+  // is only known when one was found. Without that, all this measured is that
+  // the target branch produces the same version on its own -- which is what
+  // gets said instead. Saying "pending" there contradicts the Current column
+  // in the very same comment, since a repository that has never released
+  // shows no current version and has no release pull request to point at.
+  //
+  // Not "there is no release pull request", either: the listing is skipped by
+  // `link-release-prs: false` and degrades to empty when the call fails, so an
+  // absent URL means it was not found, never that it does not exist.
+  const where = url
+    ? `[${version}](${url}), already pending;`
+    : `${version}, which ${branch(options)} already releases without it;`;
+  return `- \`${row.pkg.component}\` stays at ${where}${what}`;
+}
+
+/** branch names the target branch for prose, falling back to a generic
+ * phrase when the caller did not say which it is. */
+function branch(options: RenderOptions): string {
+  return options.base ? `\`${options.base}\`` : "the target branch";
 }
 
 /** warn is the terse list of things that will surprise someone. */
@@ -444,8 +466,8 @@ function warn(
   if (moved.length === 0 && unmoved.length > 0 && !visibleTitle(options)) {
     const type = titleType(options.title) ?? "";
     warnings.push(
-      `- \`${type}\` adds no changelog line and changes no version. The` +
-        " releases already pending happen without it.",
+      `- \`${type}\` adds no changelog line and changes no version.` +
+        ` ${branch(options)} releases the same versions without it.`,
     );
   }
   return warnings;
