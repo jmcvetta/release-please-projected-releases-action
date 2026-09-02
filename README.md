@@ -133,6 +133,12 @@ Everything release-please reads here is a read: commits, tags, releases, and
 its own config. The default `GITHUB_TOKEN` is enough and no App identity is
 needed, because nothing is pushed.
 
+A job that only renders (`mode: render`) needs `pull-requests: read` rather
+than `write`: the action lists the open release pull requests so the pending
+version can link to the one holding it. Without it that call is forbidden and
+every run carries a warning annotation. Set `link-release-prs: false` if you
+would rather not grant it.
+
 **Pull requests from forks get a read-only token**, so the comment cannot be
 posted from a `pull_request` event on one. The action warns and leaves the
 projection in the job summary rather than failing the run. To comment on fork

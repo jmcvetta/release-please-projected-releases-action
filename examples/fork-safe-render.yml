@@ -12,6 +12,12 @@ on:
 # renders and posts nothing.
 permissions:
   contents: read
+  # Reading, not writing: the action lists the open release pull requests so
+  # the pending version in the table can link to the one holding it. Without
+  # this the call is forbidden and every run carries a warning annotation for
+  # it. Set `link-release-prs: false` below instead if you would rather not
+  # grant it.
+  pull-requests: read
 
 jobs:
   render:
