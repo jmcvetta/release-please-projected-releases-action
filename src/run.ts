@@ -11,6 +11,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { GitHub, setLogger } from "release-please";
+import type { GitHub as GitHubType } from "release-please";
 import { isMalformed, resolveTypes } from "./conventional.js";
 import type { TypeSet } from "./conventional.js";
 import { project, DEFAULT_CONFIG_FILE, DEFAULT_MANIFEST_FILE } from "./project.js";
@@ -69,6 +70,13 @@ export interface RunOptions {
   advisories?: readonly string[];
   /** now is the render time; injected so the footer is testable. */
   now?: Date;
+  /**
+   * github replaces the client this would otherwise build from `owner`,
+   * `repo` and `token`. Injected so the whole path from options to rendered
+   * markdown can be tested against a fixture repository, which is the only
+   * way to test what release-please actually does with one.
+   */
+  github?: GitHubType;
 }
 
 /** Outcome is the rendered comment plus what it was rendered from. */
@@ -170,14 +178,16 @@ async function projectPullRequest(
     releaseBranchPrefix: string;
   },
 ): Promise<Projection> {
-  const github = await GitHub.create({
-    owner: options.owner,
-    repo: options.repo,
-    defaultBranch: options.base,
-    ...(options.token ? { token: options.token } : {}),
-    ...(options.apiUrl ? { apiUrl: options.apiUrl } : {}),
-    ...(options.graphqlUrl ? { graphqlUrl: options.graphqlUrl } : {}),
-  });
+  const github =
+    options.github ??
+    (await GitHub.create({
+      owner: options.owner,
+      repo: options.repo,
+      defaultBranch: options.base,
+      ...(options.token ? { token: options.token } : {}),
+      ...(options.apiUrl ? { apiUrl: options.apiUrl } : {}),
+      ...(options.graphqlUrl ? { graphqlUrl: options.graphqlUrl } : {}),
+    }));
 
   return project({
     github,

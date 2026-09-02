@@ -62101,7 +62101,7 @@ async function buildComment(options) {
   return { body, projection, malformed, types };
 }
 async function projectPullRequest(options, config, manifest, files) {
-  const github = await import_release_please2.GitHub.create({
+  const github = options.github ?? await import_release_please2.GitHub.create({
     owner: options.owner,
     repo: options.repo,
     defaultBranch: options.base,
