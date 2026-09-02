@@ -61764,9 +61764,10 @@ function readPackages(config, manifest) {
     };
   });
 }
+var PLAIN_INCLUDE_COMPONENT_IN_TAG = false;
 function plainPackage(config) {
   const component = config.component ?? "";
-  const includeComponent = config.includeComponentInTag ?? false;
+  const includeComponent = config.includeComponentInTag ?? PLAIN_INCLUDE_COMPONENT_IN_TAG;
   return {
     path: config.path ?? ROOT_PACKAGE_PATH,
     component,
@@ -61863,7 +61864,10 @@ function releaseAsNotes(body) {
 async function project(options) {
   const configFile = options.configFile ?? DEFAULT_CONFIG_FILE;
   const manifestFile = options.manifestFile ?? DEFAULT_MANIFEST_FILE;
-  const plain = options.plain;
+  const plain = options.plain ? {
+    ...options.plain,
+    includeComponentInTag: options.plain.includeComponentInTag ?? PLAIN_INCLUDE_COMPONENT_IN_TAG
+  } : void 0;
   const declared = plain ? [plainPackage(plain)] : readPackages(options.config, options.manifest);
   const overrides = plain ? {} : {
     [configFile]: options.config,
@@ -62580,7 +62584,11 @@ async function cli(argv2) {
       "release-type": { type: "string" },
       "package-path": { type: "string" },
       component: { type: "string" },
-      "include-component-in-tag": { type: "boolean" },
+      // A string, not a boolean: `parseArgs` reads a boolean option as set or
+      // unset and drops `=false` on the floor, so a boolean here could ask
+      // for the component in the tag but never ask for it to be left out --
+      // which is the half that differs from release-please's own default.
+      "include-component-in-tag": { type: "string" },
       "tag-separator": { type: "string" },
       // The changed-file list, supplied rather than diffed. For driving the
       // tool where there is no checkout to diff -- a test, or a projection
@@ -62594,6 +62602,12 @@ async function cli(argv2) {
       out: { type: "string" }
     }
   });
+  const bool = (name3, value) => {
+    const text = value.toLowerCase();
+    if (text === "true") return true;
+    if (text === "false") return false;
+    throw new Error(`--${name3} must be true or false, got \`${value}\``);
+  };
   const title = values.title;
   if (!title) throw new Error("--title is required");
   const repo = values.repo;
@@ -62612,7 +62626,7 @@ async function cli(argv2) {
     ...values["package-path"] ? { path: values["package-path"] } : {},
     ...values.component ? { component: values.component } : {},
     ...values["tag-separator"] ? { tagSeparator: values["tag-separator"] } : {},
-    ...values["include-component-in-tag"] ? { includeComponentInTag: true } : {}
+    ...values["include-component-in-tag"] === void 0 ? {} : { includeComponentInTag: bool("include-component-in-tag", values["include-component-in-tag"]) }
   } : void 0;
   const outcome = await buildComment({
     owner,

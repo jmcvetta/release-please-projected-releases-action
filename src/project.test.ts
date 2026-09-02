@@ -619,6 +619,31 @@ describe("a repository release-please runs without a manifest", () => {
     expect(tagFor(pkg, p.projected[0]!.version)).toBe("v2.5.0");
   });
 
+  it("spells it the same way release-please's own notes do", async () => {
+    // The default has to reach release-please, not just this side of it.
+    // `Strategy` defaults `includeComponentInTag` to true while
+    // `latestReleaseVersion` reads it off the config, where undefined is
+    // false -- so leaving it unset had one half of the same run looking for
+    // `v2.4.1` and the other writing `widgets-v2.5.0`, and the comment
+    // carried both: a Tag column and a changelog preview naming different
+    // tags for one release.
+    const p = await plain("feat: a thing");
+    const tag = tagFor(p.packages[0]!, p.projected[0]!.version);
+    expect(p.projected[0]!.notes).toContain(`...${tag}`);
+    expect(p.projected[0]!.notes).not.toContain("widgets-v");
+  });
+
+  it("attributes the release to no component, so the row is kept", async () => {
+    // getComponent() is the empty string when the component stays out of the
+    // tags, and that is the name the row is joined by.
+    const p = await plain("feat: a thing");
+    expect(p.projected[0]!.component).toBe("");
+    expect(p.packages[0]!.releaseComponent).toBe("");
+    expect(render(p, { title: "feat: a thing", malformed: false })).toContain(
+      "`v2.5.0`",
+    );
+  });
+
   it("honours a Release-As footer, as it does with a manifest", async () => {
     const p = await plain("fix: a thing", "Release-As: 9.9.9");
     expect(p.projected.map((r) => r.version)).toEqual(["9.9.9"]);

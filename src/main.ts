@@ -49,7 +49,11 @@ export async function cli(argv: string[]): Promise<void> {
       "release-type": { type: "string" },
       "package-path": { type: "string" },
       component: { type: "string" },
-      "include-component-in-tag": { type: "boolean" },
+      // A string, not a boolean: `parseArgs` reads a boolean option as set or
+      // unset and drops `=false` on the floor, so a boolean here could ask
+      // for the component in the tag but never ask for it to be left out --
+      // which is the half that differs from release-please's own default.
+      "include-component-in-tag": { type: "string" },
       "tag-separator": { type: "string" },
       // The changed-file list, supplied rather than diffed. For driving the
       // tool where there is no checkout to diff -- a test, or a projection
@@ -63,6 +67,14 @@ export async function cli(argv: string[]): Promise<void> {
       out: { type: "string" },
     },
   });
+
+  /** bool reads a flag written as `--flag=true` or `--flag=false`. */
+  const bool = (name: string, value: string): boolean => {
+    const text = value.toLowerCase();
+    if (text === "true") return true;
+    if (text === "false") return false;
+    throw new Error(`--${name} must be true or false, got \`${value}\``);
+  };
 
   const title = values.title;
   if (!title) throw new Error("--title is required");
@@ -89,9 +101,9 @@ export async function cli(argv: string[]): Promise<void> {
         ...(values["tag-separator"]
           ? { tagSeparator: values["tag-separator"] }
           : {}),
-        ...(values["include-component-in-tag"]
-          ? { includeComponentInTag: true }
-          : {}),
+        ...(values["include-component-in-tag"] === undefined
+          ? {}
+          : { includeComponentInTag: bool("include-component-in-tag", values["include-component-in-tag"]) }),
       }
     : undefined;
 

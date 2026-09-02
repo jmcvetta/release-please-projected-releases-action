@@ -119,6 +119,25 @@ export interface PlainConfig extends ReleaserConfig {
 }
 
 /**
+ * PLAIN_INCLUDE_COMPONENT_IN_TAG is what `include-component-in-tag` means
+ * when a plain-mode caller does not say.
+ *
+ * False: a repository releasing one package tags `v1.2.3`, not
+ * `name-v1.2.3`. That is release-please's own CLI default outside a manifest
+ * (`monorepo-tags`), and it is what a single-package repository does.
+ *
+ * It has to be spelled out rather than left undefined, because the two halves
+ * of one release-please run default it differently. `latestReleaseVersion`
+ * reads it off the configuration object, where undefined behaves as false and
+ * the tag search accepts `v2.4.1`; `Strategy` defaults it to *true*, and
+ * writes notes comparing `widgets-v2.4.1...widgets-v2.5.0`. Unset, both
+ * happen, and the comment shows a Tag column and a changelog preview naming
+ * different tags for the same release. `project` forwards this value into
+ * `Manifest.fromConfig`, so the two agree whichever way it is set.
+ */
+export const PLAIN_INCLUDE_COMPONENT_IN_TAG = false;
+
+/**
  * plainPackage describes the one package a plain-mode repository has.
  *
  * `current` is left undefined here and filled from the manifest release-please
@@ -129,10 +148,8 @@ export interface PlainConfig extends ReleaserConfig {
  */
 export function plainPackage(config: PlainConfig): PackageConfig {
   const component = config.component ?? "";
-  // Unlike manifest mode, this defaults to false: a repository releasing one
-  // package tags `v1.2.3`, not `name-v1.2.3`. That matches release-please's
-  // own default for `include-component-in-tag` outside a manifest.
-  const includeComponent = config.includeComponentInTag ?? false;
+  const includeComponent =
+    config.includeComponentInTag ?? PLAIN_INCLUDE_COMPONENT_IN_TAG;
   return {
     path: config.path ?? ROOT_PACKAGE_PATH,
     component,
@@ -435,7 +452,17 @@ export function releaseAsNotes(body: string): ReleaseAsNotes {
 export async function project(options: ProjectOptions): Promise<Projection> {
   const configFile = options.configFile ?? DEFAULT_CONFIG_FILE;
   const manifestFile = options.manifestFile ?? DEFAULT_MANIFEST_FILE;
-  const plain = options.plain;
+  // Resolved once, so the package this describes and the manifest
+  // release-please builds are configured from the same object. See
+  // PLAIN_INCLUDE_COMPONENT_IN_TAG for why the default has to be written in
+  // rather than left for release-please to supply.
+  const plain: PlainConfig | undefined = options.plain
+    ? {
+        ...options.plain,
+        includeComponentInTag:
+          options.plain.includeComponentInTag ?? PLAIN_INCLUDE_COMPONENT_IN_TAG,
+      }
+    : undefined;
   const declared = plain
     ? [plainPackage(plain)]
     : readPackages(options.config, options.manifest);
