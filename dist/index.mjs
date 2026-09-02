@@ -12261,10 +12261,10 @@ var require_util3 = __commonJS({
         return strOrArr;
       }
     }
-    function getCommitGroups(groupBy, commits, groupsSort, commitsSort) {
+    function getCommitGroups(groupBy2, commits, groupsSort, commitsSort) {
       const commitGroups = [];
       const commitGroupsObj = commits.reduce(function(groups, commit) {
-        const key = commit[groupBy] || "";
+        const key = commit[groupBy2] || "";
         if (groups[key]) {
           groups[key].push(commit);
         } else {
@@ -61414,13 +61414,25 @@ var Client = class {
       squashTitle: String(raw["squash_merge_commit_title"] ?? "PR_TITLE")
     };
   }
-  /** openPullRequests lists the open pull requests, newest page first. */
-  async openPullRequests(limit = 100) {
-    const raw = await this.request("GET", this.repoPath(`/pulls?state=open&per_page=${limit}`));
-    return raw.map((pr) => ({
-      headRefName: pr.head?.ref ?? "",
-      url: pr.html_url ?? ""
-    }));
+  /**
+   * openPullRequests lists every open pull request, following pages.
+   *
+   * The release pull requests it is read for are among the oldest a busy
+   * repository has open — release-please leaves one standing per component
+   * until someone merges it — so a single page of 100, newest first, is
+   * exactly where they are not. Stopping there lost the links in the
+   * repositories most likely to want them.
+   */
+  async openPullRequests() {
+    const prs = [];
+    for (let page = 1; page <= 10; page++) {
+      const batch = await this.request("GET", this.repoPath(`/pulls?state=open&per_page=100&page=${page}`));
+      for (const pr of batch) {
+        prs.push({ headRefName: pr.head?.ref ?? "", url: pr.html_url ?? "" });
+      }
+      if (batch.length < 100) break;
+    }
+    return prs;
   }
   /**
    * pullRequestFiles lists the files a pull request changes.
@@ -61722,14 +61734,41 @@ function readPackages(config, manifest) {
   const topInclude = config["include-component-in-tag"] ?? true;
   return Object.keys(packages).sort().map((path) => {
     const pkg = packages[path] ?? {};
+    const component = pkg["component"] ?? "";
+    const includeComponent = pkg["include-component-in-tag"] ?? topInclude;
     return {
       path,
-      component: pkg["component"] ?? "",
+      component,
+      releaseComponent: includeComponent ? component : "",
       current: manifest[path],
       separator: pkg["tag-separator"] ?? topSeparator,
-      includeComponent: pkg["include-component-in-tag"] ?? topInclude
+      includeComponent
     };
   });
+}
+async function namePackages(manifest, packages) {
+  const build = manifest.getStrategiesByPath;
+  if (typeof build !== "function") return [...packages];
+  try {
+    const strategies = await build.call(manifest);
+    return await Promise.all(
+      packages.map(async (pkg) => {
+        const strategy = strategies[pkg.path];
+        if (!strategy) return pkg;
+        const [name2, releaseComponent] = await Promise.all([
+          strategy.getBranchComponent(),
+          strategy.getComponent()
+        ]);
+        return {
+          ...pkg,
+          component: pkg.component || name2 || "",
+          releaseComponent: releaseComponent ?? ""
+        };
+      })
+    );
+  } catch {
+    return [...packages];
+  }
 }
 function toReleases(prs, releaseBranchPrefix) {
   const releases = [];
@@ -61788,7 +61827,7 @@ function releaseAsNotes(body) {
 async function project(options) {
   const configFile = options.configFile ?? DEFAULT_CONFIG_FILE;
   const manifestFile = options.manifestFile ?? DEFAULT_MANIFEST_FILE;
-  const packages = readPackages(options.config, options.manifest);
+  const declared = readPackages(options.config, options.manifest);
   const overrides = {
     [configFile]: options.config,
     [manifestFile]: options.manifest
@@ -61807,6 +61846,7 @@ async function project(options) {
   const prefix = options.releaseBranchPrefix;
   const projected = toReleases(await withPr.buildPullRequests(), prefix);
   view.assertConsulted();
+  const packages = await namePackages(withPr, declared);
   const withoutPr = await import_release_please.Manifest.fromManifest(
     options.github,
     options.commit.baseBranch,
@@ -61906,24 +61946,29 @@ function render(projection, options) {
   return [...lines, "", footer(options)].join("\n") + "\n";
 }
 function renderProjection(projection, options) {
-  const byComponent = new Map(projection.packages.map((p) => [p.component, p]));
-  const touched = new Set(
-    [...projection.touched.keys()].flatMap((path) => {
-      const pkg = projection.packages.find((p) => p.path === path);
-      return pkg ? [pkg.component] : [];
-    })
+  const touchedPackages = [...projection.touched.keys()].flatMap((path) => {
+    const pkg = projection.packages.find((p) => p.path === path);
+    return pkg ? [pkg] : [];
+  });
+  const touched = new Set(touchedPackages.map((p) => p.releaseComponent));
+  const byComponent = groupBy(projection.packages, (p) => p.releaseComponent);
+  const shared = new Set(
+    [...byComponent].filter(([, list]) => list.length > 1).map(([c]) => c)
   );
-  const pendingBy = new Map(projection.pending.map((r) => [r.component, r]));
-  const rows = projection.projected.filter((r) => touched.has(r.component)).flatMap((projected) => {
-    const pkg = byComponent.get(projected.component);
-    return pkg ? [{ pkg, projected, pending: pendingBy.get(projected.component) }] : [];
+  const unclaimed = claimOrder(byComponent, new Set(projection.touched.keys()));
+  const pendingBy = groupBy(projection.pending, (r) => r.component);
+  const rows = projection.projected.flatMap((projected) => {
+    const pkg = unclaimed.get(projected.component)?.shift();
+    return pkg ? [{ pkg, projected, pending: pendingBy.get(projected.component)?.shift() }] : [];
   });
   const moved = rows.filter((r) => r.pending?.version !== r.projected.version);
-  const unmoved = rows.filter((r) => r.pending?.version === r.projected.version);
+  const unmoved = rows.filter(
+    (r) => r.pending?.version === r.projected.version && touched.has(r.projected.component)
+  );
   const out = ["## Projected releases", ""];
   if (moved.length === 0) {
     out.push(
-      ...unmoved.length > 0 ? ["No component's version changes."] : none(projection, options, touched)
+      ...unmoved.length > 0 ? ["No component's version changes."] : none(projection, options, touchedPackages)
     );
   } else {
     out.push(
@@ -61940,14 +61985,40 @@ function renderProjection(projection, options) {
   if (unmoved.length > 0) {
     out.push("", ...unmoved.map((row) => unmovedNote(row, options)));
   }
-  const warnings = warn(projection, options, moved, unmoved);
+  const warnings = warn(projection, options, moved, unmoved, {
+    shared: byComponent,
+    named: new Set(
+      [...moved, ...unmoved].map((r) => r.pkg.releaseComponent).filter((c) => shared.has(c))
+    )
+  });
   if (warnings.length > 0) out.push("", ...warnings);
   if (moved.length > 0) out.push("", changelog(moved));
   out.push("", components(projection));
   return out;
 }
+function groupBy(values, key) {
+  const out = /* @__PURE__ */ new Map();
+  for (const value of values) {
+    const list = out.get(key(value));
+    if (list) list.push(value);
+    else out.set(key(value), [value]);
+  }
+  return out;
+}
+function claimOrder(byComponent, touchedPaths) {
+  const out = /* @__PURE__ */ new Map();
+  for (const [component, list] of byComponent) {
+    out.set(
+      component,
+      [...list].sort(
+        (a, b) => Number(touchedPaths.has(b.path)) - Number(touchedPaths.has(a.path))
+      )
+    );
+  }
+  return out;
+}
 function none(projection, options, touched) {
-  if (touched.size === 0) {
+  if (touched.length === 0) {
     const dirs = [
       ...new Set(projection.files.map((f) => f.split("/")[0] ?? f))
     ].sort();
@@ -61964,12 +62035,22 @@ function none(projection, options, touched) {
   return [
     line,
     "",
-    `Components touched: ${[...touched].sort().map((c) => `\`${c}\``).join(", ")}.`
+    `Components touched: ${nameList(touched)}.`
   ];
+}
+function nameList(packages) {
+  return [...new Set(packages.map((p) => p.component || p.path))].sort().map((name2) => `\`${name2}\``).join(", ");
+}
+function releasePrUrl(component, options) {
+  const prs = options.releasePrs;
+  if (!prs || prs.size === 0) return void 0;
+  const own = prs.get(component);
+  if (own) return own;
+  return prs.size === 1 ? prs.get("") : void 0;
 }
 function pendingCell(row, options) {
   if (!row.pending) return "\u2014";
-  const url = options.releasePrs?.get(row.pkg.component);
+  const url = releasePrUrl(row.pkg.component, options);
   return url ? `[${row.pending.version}](${url})` : row.pending.version;
 }
 function basis(moved, projection) {
@@ -61987,14 +62068,20 @@ function basis(moved, projection) {
   return `${levels.join(" / ")} bump.`;
 }
 function unmovedNote(row, options) {
-  const url = options.releasePrs?.get(row.pkg.component);
+  const url = releasePrUrl(row.pkg.component, options);
   const version = row.projected.version;
   const where = url ? `[${version}](${url})` : version;
   const what = visibleTitle(options) ? " this PR adds a changelog line to it, not a version." : " this PR does not move it.";
   return `- \`${row.pkg.component}\` stays at ${where}, already pending;${what}`;
 }
-function warn(projection, options, moved, unmoved) {
+function warn(projection, options, moved, unmoved, components2) {
   const warnings = [...options.advisories ?? []];
+  for (const component of [...components2.named].sort()) {
+    const paths = (components2.shared.get(component) ?? []).map((p) => `\`${p.path}\``).join(", ");
+    warnings.push(
+      `- ${paths} release under one component name, so a row's **Current** and matched files may belong to either. Give each package its own \`component\`.`
+    );
+  }
   if (projection.ignoredReleaseAs) {
     warnings.push(
       `- \`Release-As: ${projection.ignoredReleaseAs}\` was **ignored** \u2014 release-please returned a different version. A note only counts when it parses as a git trailer, so no non-trailer text may follow it: a \`---\` rule or an attribution line below it voids it silently. Check the merge box too, which is prefilled from the description but editable.`

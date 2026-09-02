@@ -141,26 +141,48 @@ function renderProjection(
   projection: Projection,
   options: RenderOptions,
 ): string[] {
-  const byComponent = new Map(projection.packages.map((p) => [p.component, p]));
-  const touched = new Set(
-    [...projection.touched.keys()].flatMap((path) => {
-      const pkg = projection.packages.find((p) => p.path === path);
-      return pkg ? [pkg.component] : [];
-    }),
+  const touchedPackages = [...projection.touched.keys()].flatMap((path) => {
+    const pkg = projection.packages.find((p) => p.path === path);
+    return pkg ? [pkg] : [];
+  });
+  const touched = new Set(touchedPackages.map((p) => p.releaseComponent));
+
+  // Joined on the name release-please attributes releases to, not on the
+  // name the config spells: a package that declares no component still gets
+  // one, and a package that keeps its component out of its tags gets none.
+  const byComponent = groupBy(projection.packages, (p) => p.releaseComponent);
+  const shared = new Set(
+    [...byComponent].filter(([, list]) => list.length > 1).map(([c]) => c),
   );
-  const pendingBy = new Map(projection.pending.map((r) => [r.component, r]));
+  const unclaimed = claimOrder(byComponent, new Set(projection.touched.keys()));
+  const pendingBy = groupBy(projection.pending, (r) => r.component);
 
-  const rows: Row[] = projection.projected
-    .filter((r) => touched.has(r.component))
-    .flatMap((projected) => {
-      const pkg = byComponent.get(projected.component);
-      return pkg
-        ? [{ pkg, projected, pending: pendingBy.get(projected.component) }]
-        : [];
-    });
+  const rows: Row[] = projection.projected.flatMap((projected) => {
+    // Each release takes a package of its own. A component name is not
+    // unique across packages, and handing the same package to two releases
+    // lent one of them the other's current version, path and tag.
+    const pkg = unclaimed.get(projected.component)?.shift();
+    return pkg
+      ? [{ pkg, projected, pending: pendingBy.get(projected.component)?.shift() }]
+      : [];
+  });
 
+  // A moved version is this pull request's doing whatever files it changed:
+  // the two passes differ only by the merge, so nothing else could have moved
+  // it. release-please attributes releases itself, and its `node-workspace`
+  // and `linked-versions` plugins release components a pull request never
+  // touches — which a filter on the touched components dropped, understating
+  // the merge or reporting nothing for it at all.
+  //
+  // A version that does not move is another matter. That release is coming
+  // from commits already on the target branch, so it is only this pull
+  // request's business for a component it actually reaches.
   const moved = rows.filter((r) => r.pending?.version !== r.projected.version);
-  const unmoved = rows.filter((r) => r.pending?.version === r.projected.version);
+  const unmoved = rows.filter(
+    (r) =>
+      r.pending?.version === r.projected.version &&
+      touched.has(r.projected.component),
+  );
 
   const out = ["## Projected releases", ""];
 
@@ -168,7 +190,7 @@ function renderProjection(
     out.push(
       ...(unmoved.length > 0
         ? ["No component's version changes."]
-        : none(projection, options, touched)),
+        : none(projection, options, touchedPackages)),
     );
   } else {
     out.push(
@@ -191,11 +213,59 @@ function renderProjection(
     out.push("", ...unmoved.map((row) => unmovedNote(row, options)));
   }
 
-  const warnings = warn(projection, options, moved, unmoved);
+  const warnings = warn(projection, options, moved, unmoved, {
+    shared: byComponent,
+    named: new Set(
+      [...moved, ...unmoved]
+        .map((r) => r.pkg.releaseComponent)
+        .filter((c) => shared.has(c)),
+    ),
+  });
   if (warnings.length > 0) out.push("", ...warnings);
 
   if (moved.length > 0) out.push("", changelog(moved));
   out.push("", components(projection));
+  return out;
+}
+
+/** groupBy indexes values by a key several of them may share. */
+function groupBy<T>(
+  values: readonly T[],
+  key: (value: T) => string,
+): Map<string, T[]> {
+  const out = new Map<string, T[]>();
+  for (const value of values) {
+    const list = out.get(key(value));
+    if (list) list.push(value);
+    else out.set(key(value), [value]);
+  }
+  return out;
+}
+
+/**
+ * claimOrder copies the packages of each component into the order releases
+ * should claim them in: the ones the pull request touches first.
+ *
+ * It only matters when a component names more than one package, where nothing
+ * in release-please's answer says which of them a release belongs to. Having
+ * changed a file under one of them is the best evidence available, and the
+ * sort is stable, so packages the pull request does not touch keep their
+ * configured order behind those it does.
+ */
+function claimOrder(
+  byComponent: ReadonlyMap<string, PackageConfig[]>,
+  touchedPaths: ReadonlySet<string>,
+): Map<string, PackageConfig[]> {
+  const out = new Map<string, PackageConfig[]>();
+  for (const [component, list] of byComponent) {
+    out.set(
+      component,
+      [...list].sort(
+        (a, b) =>
+          Number(touchedPaths.has(b.path)) - Number(touchedPaths.has(a.path)),
+      ),
+    );
+  }
   return out;
 }
 
@@ -213,9 +283,9 @@ function renderProjection(
 function none(
   projection: Projection,
   options: RenderOptions,
-  touched: ReadonlySet<string>,
+  touched: readonly PackageConfig[],
 ): string[] {
-  if (touched.size === 0) {
+  if (touched.length === 0) {
     const dirs = [
       ...new Set(projection.files.map((f) => f.split("/")[0] ?? f)),
     ].sort();
@@ -241,15 +311,52 @@ function none(
   return [
     line,
     "",
-    `Components touched: ${[...touched].sort().map((c) => `\`${c}\``).join(", ")}.`,
+    `Components touched: ${nameList(touched)}.`,
   ];
+}
+
+/** nameList spells a set of packages by the name their tags carry, falling
+ * back to the path for a package whose tags name no component. */
+function nameList(packages: readonly PackageConfig[]): string {
+  return [...new Set(packages.map((p) => p.component || p.path))]
+    .sort()
+    .map((name) => `\`${name}\``)
+    .join(", ");
+}
+
+/**
+ * releasePrUrl finds the standing release pull request holding a component's
+ * pending version.
+ *
+ * The index is keyed by the component in the release branch's name, which is
+ * the component release-please knows the package by. Under its *default*
+ * `separate-pull-requests: false` there is no such segment: one pull request
+ * aggregates every component, on a branch naming none of them, and it indexes
+ * under the empty string. Looking a real component up in that index finds
+ * nothing, which is how this feature came to cost an API call per run and
+ * link nothing at all for the ordinary configuration.
+ *
+ * The empty key is only read as "the pull request for everything" when it is
+ * the whole index. A repository that does separate its release pull requests
+ * can have one keyed empty too — a root package that keeps its component out
+ * of its branch name — and that one belongs to that package alone.
+ */
+function releasePrUrl(
+  component: string,
+  options: RenderOptions,
+): string | undefined {
+  const prs = options.releasePrs;
+  if (!prs || prs.size === 0) return undefined;
+  const own = prs.get(component);
+  if (own) return own;
+  return prs.size === 1 ? prs.get("") : undefined;
 }
 
 /** pendingCell is where the component's standing release PR already sits,
  * this pull request excluded, linked to that PR when one is open. */
 function pendingCell(row: Row, options: RenderOptions): string {
   if (!row.pending) return "—";
-  const url = options.releasePrs?.get(row.pkg.component);
+  const url = releasePrUrl(row.pkg.component, options);
   return url ? `[${row.pending.version}](${url})` : row.pending.version;
 }
 
@@ -283,7 +390,7 @@ function basis(moved: Row[], projection: Projection): string {
  * for a `feat:` is wrong.
  */
 function unmovedNote(row: Row, options: RenderOptions): string {
-  const url = options.releasePrs?.get(row.pkg.component);
+  const url = releasePrUrl(row.pkg.component, options);
   const version = row.projected.version;
   const where = url ? `[${version}](${url})` : version;
   const what = visibleTitle(options)
@@ -298,8 +405,25 @@ function warn(
   options: RenderOptions,
   moved: Row[],
   unmoved: Row[],
+  components: {
+    shared: ReadonlyMap<string, PackageConfig[]>;
+    named: ReadonlySet<string>;
+  },
 ): string[] {
   const warnings: string[] = [...(options.advisories ?? [])];
+  // Nothing in release-please's answer says which of two packages sharing a
+  // component name a release belongs to, so a row that could be either says
+  // so rather than presenting a guess as the working.
+  for (const component of [...components.named].sort()) {
+    const paths = (components.shared.get(component) ?? [])
+      .map((p) => `\`${p.path}\``)
+      .join(", ");
+    warnings.push(
+      `- ${paths} release under one component name, so a row's` +
+        " **Current** and matched files may belong to either. Give each" +
+        " package its own `component`.",
+    );
+  }
   if (projection.ignoredReleaseAs) {
     warnings.push(
       `- \`Release-As: ${projection.ignoredReleaseAs}\` was **ignored** —` +

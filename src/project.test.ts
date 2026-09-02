@@ -14,6 +14,7 @@ import { setLogger } from "release-please";
 import { fakeScm, RELEASE_SHA } from "./fake-scm.fixture.js";
 import { project } from "./project.js";
 import type { Projection } from "./project.js";
+import { render } from "./render.js";
 
 beforeAll(() => {
   const quiet = () => {};
@@ -416,5 +417,128 @@ describe("a repository that does not separate its release pull requests", () => 
   it("still reports a single-component release from the one entry", async () => {
     const p = await aggregated("feat: a thing", ["api/src/x.ts"]);
     expect(versions(p)).toEqual({ "acme-api": "2.5.0" });
+  });
+});
+
+// The join key between this preview's own view of the config and
+// release-please's answer is the component name, and the config need not
+// spell one: several release types derive it. Reading the config alone left
+// such a package named "" — matching no release, so the table came out empty
+// and the comment said "None" for a merge that would really cut a tag.
+describe("a package whose config names no component", () => {
+  const CONFIG_NODE = {
+    "separate-pull-requests": true,
+    packages: {
+      api: { "release-type": "node" },
+    },
+  };
+  const MANIFEST_NODE = { api: "2.4.1" };
+
+  async function node(): Promise<Projection> {
+    return project({
+      github: fakeScm({
+        config: CONFIG_NODE,
+        manifest: MANIFEST_NODE,
+        files: {
+          "api/package.json": JSON.stringify({
+            name: "@acme/api",
+            version: "2.4.1",
+          }),
+        },
+        releases: [{ tagName: "api-v2.4.1", sha: RELEASE_SHA }],
+      }),
+      config: CONFIG_NODE,
+      manifest: MANIFEST_NODE,
+      commit: {
+        title: "feat: a thing",
+        body: "",
+        files: ["api/src/x.ts"],
+        number: 7,
+        headSha: "abcdef1234567890",
+        headBranch: "topic",
+        baseBranch: "master",
+      },
+    });
+  }
+
+  it("takes the name release-please derives, not the empty string", async () => {
+    const projection = await node();
+    // release-please strips the scope: `@acme/api` releases as `api`.
+    expect(versions(projection)).toEqual({ api: "2.5.0" });
+    expect(projection.packages).toEqual([
+      expect.objectContaining({ path: "api", releaseComponent: "api" }),
+    ]);
+  });
+
+  it("renders the release rather than reporting none", async () => {
+    const out = render(await node(), { title: "feat: a thing", malformed: false });
+    expect(out).toContain("`api-v2.5.0`");
+    expect(out).not.toContain("None —");
+  });
+});
+
+// release-please attributes releases itself, and its plugins release
+// components no file of the pull request is under. `linked-versions` is the
+// plain case: touching one component bumps every component in the group.
+// Filtering the projection down to the touched components dropped those
+// rows, understating the merge or reporting nothing for it at all.
+describe("a release for a component the pull request does not touch", () => {
+  const CONFIG_LINKED = {
+    "separate-pull-requests": true,
+    plugins: [
+      {
+        type: "linked-versions",
+        groupName: "acme",
+        components: ["acme-api", "acme-ui"],
+      },
+    ],
+    packages: {
+      api: {
+        "release-type": "simple",
+        component: "acme-api",
+        "include-component-in-tag": true,
+        "tag-separator": "@",
+      },
+      ui: {
+        "release-type": "simple",
+        component: "acme-ui",
+        "include-component-in-tag": true,
+        "tag-separator": "@",
+      },
+    },
+  };
+
+  async function linked(): Promise<Projection> {
+    return project({
+      github: fakeScm({ config: CONFIG_LINKED, manifest: MANIFEST }),
+      config: CONFIG_LINKED,
+      manifest: MANIFEST,
+      commit: {
+        title: "feat: a thing",
+        body: "",
+        files: ["api/src/x.ts"],
+        number: 7,
+        headSha: "abcdef1234567890",
+        headBranch: "topic",
+        baseBranch: "master",
+      },
+    });
+  }
+
+  it("projects the linked component release-please carries along", async () => {
+    expect(versions(await linked())).toEqual({
+      "acme-api": "2.5.0",
+      "acme-ui": "2.5.0",
+    });
+    expect((await linked()).touched.has("ui")).toBe(false);
+  });
+
+  it("keeps it in the table", async () => {
+    const out = render(await linked(), {
+      title: "feat: a thing",
+      malformed: false,
+    });
+    expect(out).toContain("`acme-api@v2.5.0`");
+    expect(out).toContain("`acme-ui@v2.5.0`");
   });
 });

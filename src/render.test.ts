@@ -7,6 +7,7 @@ import { bumpLevel, footer, render } from "./render.js";
 const API: PackageConfig = {
   path: "api",
   component: "acme-api",
+  releaseComponent: "acme-api",
   current: "2.4.1",
   separator: "@",
   includeComponent: true,
@@ -14,6 +15,7 @@ const API: PackageConfig = {
 const UI: PackageConfig = {
   path: "ui",
   component: "acme-ui",
+  releaseComponent: "acme-ui",
   current: "1.0.0",
   separator: "@",
   includeComponent: true,
@@ -276,5 +278,109 @@ describe("a repository whose changelog recognizes other types", () => {
       types,
     });
     expect(out).toContain("`ship`, `tidy`");
+  });
+});
+
+// release-please's default aggregates every component into one release pull
+// request, on a branch naming none of them, which indexes under the empty
+// string. Looking a real component up in that index found nothing, so the
+// links never appeared for the ordinary configuration.
+describe("linking an aggregated release pull request", () => {
+  const aggregated = new Map([["", "https://example.test/pr/9"]]);
+
+  it("links a pending version to the one pull request holding it", () => {
+    const out = body(
+      projection({
+        projected: [{ component: "acme-api", version: "3.0.0", notes: "" }],
+        pending: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
+      { releasePrs: aggregated },
+    );
+    expect(out).toContain("[2.5.0](https://example.test/pr/9)");
+  });
+
+  it("links an unmoved component's note to it too", () => {
+    const out = body(
+      projection({
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+        pending: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
+      { releasePrs: aggregated },
+    );
+    expect(out).toContain("stays at [2.5.0](https://example.test/pr/9)");
+  });
+
+  // A repository that does separate its release pull requests can have one
+  // keyed empty as well -- a root package whose branch names no component --
+  // and that one belongs to that package, not to every other.
+  it("does not lend an empty key to a component beside it", () => {
+    const out = body(
+      projection({
+        projected: [{ component: "acme-api", version: "3.0.0", notes: "" }],
+        pending: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
+      {
+        releasePrs: new Map([
+          ["", "https://example.test/pr/9"],
+          ["acme-ui", "https://example.test/pr/10"],
+        ]),
+      },
+    );
+    expect(out).toContain("| 2.5.0 |");
+    expect(out).not.toContain("https://example.test/pr/9");
+  });
+});
+
+// A component name is not unique across packages: two that keep their
+// component out of their tags both report none, and a config can name the
+// same component twice. Keyed by one package each, the second release took
+// the first's current version, path and tag.
+describe("two packages under one component name", () => {
+  const ROOT: PackageConfig = {
+    path: "api",
+    component: "acme-api",
+    releaseComponent: "",
+    current: "2.4.1",
+    separator: "-",
+    includeComponent: false,
+  };
+  const OTHER: PackageConfig = {
+    path: "ui",
+    component: "acme-ui",
+    releaseComponent: "",
+    current: "1.0.0",
+    separator: "-",
+    includeComponent: false,
+  };
+  const both = projection({
+    packages: [ROOT, OTHER],
+    touched: new Map([
+      ["api", ["api/src/x.ts"]],
+      ["ui", ["ui/index.html"]],
+    ]),
+    files: ["api/src/x.ts", "ui/index.html"],
+    projected: [
+      { component: "", version: "2.5.0", notes: "" },
+      { component: "", version: "1.1.0", notes: "" },
+    ],
+  });
+
+  it("gives each release a package of its own", () => {
+    const out = body(both);
+    expect(out).toContain("| `acme-api` | `v2.5.0` | 2.4.1 |");
+    expect(out).toContain("| `acme-ui` | `v1.1.0` | 1.0.0 |");
+  });
+
+  it("says the attribution is a guess", () => {
+    expect(body(both)).toContain("release under one component name");
+  });
+
+  it("stays quiet when every component names one package", () => {
+    const out = body(
+      projection({
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
+    );
+    expect(out).not.toContain("release under one component name");
   });
 });
