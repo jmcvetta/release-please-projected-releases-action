@@ -8,6 +8,7 @@ import {
   componentOfBranch,
   isMalformed,
   isReleaseBranch,
+  releaseBranch,
   resolveTypes,
   titleType,
 } from "./conventional.js";
@@ -185,6 +186,17 @@ describe("componentOfBranch, on the shapes other repositories have", () => {
     // into one pull request, gets this shape. It is still a release branch,
     // and its component is the empty name release-please gave it.
     expect(componentOfBranch("release-please--branches--master")).toBe("");
+  });
+
+  it("recovers the branch a release targets, not just its component", () => {
+    expect(releaseBranch("release-please--branches--master")).toEqual({
+      base: "master",
+      component: "",
+    });
+    expect(
+      releaseBranch("release-please--branches--v1.x--components--acme-api"),
+    ).toEqual({ base: "v1.x", component: "acme-api" });
+    expect(releaseBranch("topic/whatever")).toBeUndefined();
   });
 
   it("keeps a component containing the separator whole", () => {

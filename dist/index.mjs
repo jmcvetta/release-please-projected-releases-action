@@ -61640,13 +61640,16 @@ function isMalformed(title, types = DEFAULT_TYPES) {
 function escape(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-function componentOfBranch(branch2, prefix = DEFAULT_TYPES.releaseBranchPrefix) {
+function releaseBranch(branch2, prefix = DEFAULT_TYPES.releaseBranchPrefix) {
   const pattern = new RegExp(
     `^${escape(prefix)}branches--(?<base>[^-]|.+?)(?:--components--(?<component>.+))?$`
   );
   const groups = pattern.exec(branch2.trim())?.groups;
   if (!groups) return void 0;
-  return groups["component"] ?? "";
+  return { base: groups["base"] ?? "", component: groups["component"] ?? "" };
+}
+function componentOfBranch(branch2, prefix = DEFAULT_TYPES.releaseBranchPrefix) {
+  return releaseBranch(branch2, prefix)?.component;
 }
 
 // src/split.ts
@@ -61937,23 +61940,23 @@ async function project(options) {
 var import_release_please3 = __toESM(require_src2(), 1);
 
 // src/release-prs.ts
-function indexReleasePrs(prs, prefix = DEFAULT_TYPES.releaseBranchPrefix) {
+function indexReleasePrs(prs, prefix = DEFAULT_TYPES.releaseBranchPrefix, base) {
   const index = /* @__PURE__ */ new Map();
   for (const pr of prs) {
-    const component = componentOfBranch(pr.headRefName, prefix);
-    if (component !== void 0 && pr.url.trim()) {
-      index.set(component, pr.url.trim());
-    }
+    const branch2 = releaseBranch(pr.headRefName, prefix);
+    if (!branch2 || !pr.url.trim()) continue;
+    if (base !== void 0 && branch2.base !== base) continue;
+    index.set(branch2.component, pr.url.trim());
   }
   return index;
 }
-function loadReleasePrs(text, prefix = DEFAULT_TYPES.releaseBranchPrefix) {
+function loadReleasePrs(text, prefix = DEFAULT_TYPES.releaseBranchPrefix, base) {
   const prs = [];
   for (const line of text.split("\n")) {
     const [headRefName = "", url = ""] = line.split("	");
     if (headRefName.trim()) prs.push({ headRefName, url });
   }
-  return indexReleasePrs(prs, prefix);
+  return indexReleasePrs(prs, prefix, base);
 }
 
 // src/run.ts
@@ -62419,7 +62422,7 @@ async function action(env = process.env) {
   const headBranch = inputOr("head-branch", event.headBranch ?? "", env);
   quietLogger();
   const advisories = await mergeNotes(client, env, event.commits);
-  const releasePrs = await standingReleasePrs(client, env);
+  const releasePrs = await standingReleasePrs(client, env, base);
   const files = await pullRequestFiles(client, number, base, env);
   const outcome = await buildComment({
     owner,
@@ -62518,13 +62521,14 @@ async function mergeNotes(client, env, commits) {
     return [];
   }
 }
-async function standingReleasePrs(client, env) {
+async function standingReleasePrs(client, env, base) {
   if (!boolInput("link-release-prs", true, env)) return /* @__PURE__ */ new Map();
   try {
     const prefix = input("release-branch-prefix", env);
     return indexReleasePrs(
       await client.openPullRequests(),
-      prefix || void 0
+      prefix || void 0,
+      base
     );
   } catch (error) {
     warning(`could not list the open release pull requests: ${String(error)}`);
@@ -62650,7 +62654,8 @@ async function cli(argv2) {
     manifestFile: values["manifest-file"],
     releasePrs: values["release-prs"] ? loadReleasePrs(
       readFileSync5(values["release-prs"], "utf8"),
-      values["release-branch-prefix"]
+      values["release-branch-prefix"],
+      base
     ) : /* @__PURE__ */ new Map(),
     runUrl: values["run-url"],
     ...visible || hidden ? { typeOverrides: { ...visible ? { visible } : {}, ...hidden ? { hidden } : {} } } : {},

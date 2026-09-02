@@ -243,25 +243,55 @@ function escape(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** ReleaseBranch is what release-please's branch naming encodes: which
+ * branch the release targets, and which component it is for. */
+export interface ReleaseBranch {
+  /** base is the branch the release pull request targets. */
+  base: string;
+  /** component is the component the release is for, empty for a branch with
+   * no `--components--` segment. */
+  component: string;
+}
+
 /**
- * componentOfBranch recovers the component name from a release branch, or
- * undefined when the branch is not one.
+ * releaseBranch takes release-please's branch naming apart, or returns
+ * undefined when the branch is not one of its release branches.
  *
- * release-please names a release branch deterministically, so the component
- * can be recovered without asking the API what the pull request is for. A
- * repository releasing a single component, or aggregating every component
- * into one pull request, gets a branch with no `--components--` segment;
- * that is a release branch for the unnamed component, so it returns the
- * empty string rather than undefined.
+ * release-please names a release branch deterministically
+ * (`util/branch-name.ts`), so both halves can be recovered without asking the
+ * API what the pull request is for. A repository releasing a single
+ * component, or aggregating every component into one pull request, gets a
+ * branch with no `--components--` segment; that is a release branch for the
+ * unnamed component, so the component is the empty string rather than
+ * undefined.
+ *
+ * The base matters because the component alone does not identify a release
+ * pull request. A repository maintaining a `v1.x` branch alongside `master`
+ * has a standing release pull request on each, and under the ordinary
+ * aggregated configuration both name no component at all — so keyed by
+ * component they are the same key, and the comment on a `master` pull request
+ * linked whichever of them was read last.
  */
-export function componentOfBranch(
+export function releaseBranch(
   branch: string,
   prefix: string = DEFAULT_TYPES.releaseBranchPrefix,
-): string | undefined {
+): ReleaseBranch | undefined {
   const pattern = new RegExp(
     `^${escape(prefix)}branches--(?<base>[^-]|.+?)(?:--components--(?<component>.+))?$`,
   );
   const groups = pattern.exec(branch.trim())?.groups;
   if (!groups) return undefined;
-  return groups["component"] ?? "";
+  return { base: groups["base"] ?? "", component: groups["component"] ?? "" };
+}
+
+/**
+ * componentOfBranch recovers the component name from a release branch, or
+ * undefined when the branch is not one. See releaseBranch, which also says
+ * which branch the release targets.
+ */
+export function componentOfBranch(
+  branch: string,
+  prefix: string = DEFAULT_TYPES.releaseBranchPrefix,
+): string | undefined {
+  return releaseBranch(branch, prefix)?.component;
 }

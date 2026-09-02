@@ -8,7 +8,7 @@
  * accumulated changelog one click away.
  */
 
-import { componentOfBranch, DEFAULT_TYPES } from "./conventional.js";
+import { DEFAULT_TYPES, releaseBranch } from "./conventional.js";
 
 /** ReleasePr is one open release pull request. */
 export interface ReleasePr {
@@ -26,17 +26,27 @@ export interface ReleasePr {
  * one is not an error. A repository releasing a single component, or
  * aggregating every component into one pull request, indexes under the empty
  * string, which is the component name release-please gives it.
+ *
+ * `base` narrows the listing to the release pull requests targeting one
+ * branch, and should be passed whenever the caller knows which branch it is
+ * describing. A repository maintaining a `v1.x` branch alongside `master` has
+ * a standing release pull request on each, and under the aggregated
+ * configuration both name no component -- so without this they share the
+ * empty key, the index looks like the single aggregated one it is not, and
+ * the "already pending" cell on a `master` pull request links the `v1.x`
+ * release.
  */
 export function indexReleasePrs(
   prs: readonly ReleasePr[],
   prefix: string = DEFAULT_TYPES.releaseBranchPrefix,
+  base?: string,
 ): Map<string, string> {
   const index = new Map<string, string>();
   for (const pr of prs) {
-    const component = componentOfBranch(pr.headRefName, prefix);
-    if (component !== undefined && pr.url.trim()) {
-      index.set(component, pr.url.trim());
-    }
+    const branch = releaseBranch(pr.headRefName, prefix);
+    if (!branch || !pr.url.trim()) continue;
+    if (base !== undefined && branch.base !== base) continue;
+    index.set(branch.component, pr.url.trim());
   }
   return index;
 }
@@ -49,11 +59,12 @@ export function indexReleasePrs(
 export function loadReleasePrs(
   text: string,
   prefix: string = DEFAULT_TYPES.releaseBranchPrefix,
+  base?: string,
 ): Map<string, string> {
   const prs: ReleasePr[] = [];
   for (const line of text.split("\n")) {
     const [headRefName = "", url = ""] = line.split("\t");
     if (headRefName.trim()) prs.push({ headRefName, url });
   }
-  return indexReleasePrs(prs, prefix);
+  return indexReleasePrs(prs, prefix, base);
 }

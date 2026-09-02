@@ -101,7 +101,7 @@ export async function action(env: Env = process.env): Promise<void> {
   quietLogger();
 
   const advisories = await mergeNotes(client, env, event.commits);
-  const releasePrs = await standingReleasePrs(client, env);
+  const releasePrs = await standingReleasePrs(client, env, base);
   const files = await pullRequestFiles(client, number, base, env);
 
   const outcome = await buildComment({
@@ -256,13 +256,18 @@ async function mergeNotes(
 }
 
 /**
- * standingReleasePrs finds the open release pull requests, so a pending
- * version can link to the one holding it. A read that fails costs the links,
- * never the comment.
+ * standingReleasePrs finds the open release pull requests targeting `base`,
+ * so a pending version can link to the one holding it. A read that fails
+ * costs the links, never the comment.
+ *
+ * Narrowed to the target branch, because a repository maintaining a `v1.x`
+ * branch alongside `master` has a standing release pull request on each and
+ * the aggregated ones name no component to tell them apart.
  */
 async function standingReleasePrs(
   client: Client,
   env: Env,
+  base: string,
 ): Promise<Map<string, string>> {
   if (!boolInput("link-release-prs", true, env)) return new Map();
   try {
@@ -270,6 +275,7 @@ async function standingReleasePrs(
     return indexReleasePrs(
       await client.openPullRequests(),
       prefix || undefined,
+      base,
     );
   } catch (error) {
     warning(`could not list the open release pull requests: ${String(error)}`);

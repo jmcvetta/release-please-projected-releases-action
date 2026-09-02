@@ -127,6 +127,7 @@ export async function cli(argv: string[]): Promise<void> {
       ? loadReleasePrs(
           readFileSync(values["release-prs"], "utf8"),
           values["release-branch-prefix"],
+          base,
         )
       : new Map<string, string>(),
     runUrl: values["run-url"],
