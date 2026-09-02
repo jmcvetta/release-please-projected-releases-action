@@ -18,7 +18,7 @@ import type { GitHub, ReleasePullRequest, Strategy } from "release-please";
 import { componentOfBranch } from "./conventional.js";
 import { splitFiles } from "./split.js";
 import type { HeadOverrides, SyntheticCommit } from "./pr-view.js";
-import { viewWithPullRequest } from "./pr-view.js";
+import { SeamError, viewWithPullRequest } from "./pr-view.js";
 
 /** DEFAULT_CONFIG_FILE is release-please's config path. */
 export const DEFAULT_CONFIG_FILE = "release-please-config.json";
@@ -109,46 +109,90 @@ export function readPackages(
  * cut a tag. Only release-please can say what the name is, so it is asked.
  *
  * `Manifest` builds its strategies internally and does not export them, so
- * this reaches for a private method. That is a seam, but a mild one: the
- * strategies are already built and cached by `buildPullRequests`, and if the
- * method ever goes away the packages keep their configured names — which is
- * exactly what they had before — rather than the run failing. Unlike the
- * synthetic-commit seam, a wrong answer here shows up in the table.
+ * this reaches for a private method. The strategies are already built and
+ * cached by `buildPullRequests`, so asking costs nothing — but it is a seam,
+ * and an upgrade could move it.
+ *
+ * A package that spells its own `component` needs none of this: the name
+ * release-please would derive is the one the config already gives, so losing
+ * the seam changes nothing and the run carries on. A package that does not is
+ * the case this exists for, and there the fallback is the failure the whole
+ * preview has to be loud about — an empty join key matches no release, so the
+ * comment says "None" for a merge that really would cut a tag, and nothing on
+ * screen looks wrong. That one raises `SeamError` rather than degrading, for
+ * the same reason `assertConsulted` does: the breakage belongs on the
+ * dependency-bump pull request, where someone is already looking.
  */
 export async function namePackages(
   manifest: Manifest,
   packages: readonly PackageConfig[],
 ): Promise<PackageConfig[]> {
+  // Only a package whose tags carry a component it did not spell needs a name
+  // from release-please. One that keeps its component out of its tags reports
+  // no component either way, and matches the releases that carry none.
+  const derived = packages.filter((pkg) => !pkg.component && pkg.includeComponent);
+
   const build = (
     manifest as unknown as {
       getStrategiesByPath?: () => Promise<Record<string, Strategy>>;
     }
   ).getStrategiesByPath;
-  if (typeof build !== "function") return [...packages];
+  if (typeof build !== "function") return withoutSeam(packages, derived, "gone");
 
+  let strategies: Record<string, Strategy>;
   try {
-    const strategies = await build.call(manifest);
-    return await Promise.all(
-      packages.map(async (pkg) => {
-        const strategy = strategies[pkg.path];
-        if (!strategy) return pkg;
-        // getBranchComponent is the name release-please knows the package by
-        // whether or not it tags with it; getComponent is the empty string
-        // when it does not, which is what the releases then carry.
-        const [name, releaseComponent] = await Promise.all([
-          strategy.getBranchComponent(),
-          strategy.getComponent(),
-        ]);
-        return {
-          ...pkg,
-          component: pkg.component || name || "",
-          releaseComponent: releaseComponent ?? "",
-        };
-      }),
-    );
-  } catch {
-    return [...packages];
+    strategies = await build.call(manifest);
+  } catch (error) {
+    return withoutSeam(packages, derived, `unusable (${String(error)})`);
   }
+
+  return await Promise.all(
+    packages.map(async (pkg) => {
+      const strategy = strategies[pkg.path];
+      if (!strategy) {
+        if (!pkg.component && pkg.includeComponent) {
+          throw new SeamError(
+            `release-please built no strategy for the package \`${pkg.path}\`,` +
+              " whose config names no component, so the name its releases are" +
+              " attributed to cannot be known. Every projected release for it" +
+              " would be dropped from the comment.",
+          );
+        }
+        return pkg;
+      }
+      // getBranchComponent is the name release-please knows the package by
+      // whether or not it tags with it; getComponent is the empty string
+      // when it does not, which is what the releases then carry.
+      const [name, releaseComponent] = await Promise.all([
+        strategy.getBranchComponent(),
+        strategy.getComponent(),
+      ]);
+      return {
+        ...pkg,
+        component: pkg.component || name || "",
+        releaseComponent: releaseComponent ?? "",
+      };
+    }),
+  );
+}
+
+/**
+ * withoutSeam decides what a missing `getStrategiesByPath` costs: nothing at
+ * all when every package spells its own component, and the run otherwise.
+ */
+function withoutSeam(
+  packages: readonly PackageConfig[],
+  derived: readonly PackageConfig[],
+  state: string,
+): PackageConfig[] {
+  if (derived.length === 0) return [...packages];
+  throw new SeamError(
+    `release-please's \`Manifest.getStrategiesByPath\` is ${state}, and` +
+      ` ${derived.map((p) => `\`${p.path}\``).join(", ")} name no component in` +
+      " release-please-config.json, so the name their releases are attributed" +
+      " to cannot be known. Every projected release for them would be dropped" +
+      " from the comment.",
+  );
 }
 
 /** Release is one component release-please would open a release for. */

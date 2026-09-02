@@ -46,14 +46,15 @@ export interface SyntheticCommit {
 }
 
 /**
- * SeamError reports that release-please never read the synthetic commit.
+ * SeamError reports that a seam into release-please has moved: the synthetic
+ * commit went unread, or the strategies `namePackages` joins on went missing.
  *
  * This is the failure the whole preview has to be loud about. `release-please`
- * is pinned to an exact version, so the seam cannot move under a running
- * action — but an upgrade could move it, and the symptom would be a preview
- * reporting that nothing releases, which is also the most common true answer.
- * Nothing on screen would look wrong. Failing the step instead puts the
- * breakage on the dependency-bump pull request, where someone is already
+ * is pinned to an exact version, so a seam cannot move under a running action
+ * — but an upgrade could move it, and the symptom either way would be a
+ * preview reporting that nothing releases, which is also the most common true
+ * answer. Nothing on screen would look wrong. Failing the step instead puts
+ * the breakage on the dependency-bump pull request, where someone is already
  * looking.
  */
 export class SeamError extends Error {

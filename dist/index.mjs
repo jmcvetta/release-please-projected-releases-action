@@ -61354,6 +61354,7 @@ var ApiError = class extends Error {
     this.status = status;
   }
 };
+var OPEN_PR_PAGES = 10;
 var Client = class {
   owner;
   repo;
@@ -61415,24 +61416,29 @@ var Client = class {
     };
   }
   /**
-   * openPullRequests lists every open pull request, following pages.
+   * openPullRequests lists the open pull requests, following pages.
    *
-   * The release pull requests it is read for are among the oldest a busy
-   * repository has open — release-please leaves one standing per component
-   * until someone merges it — so a single page of 100, newest first, is
-   * exactly where they are not. Stopping there lost the links in the
-   * repositories most likely to want them.
+   * There is no server-side filter for the ones this is read for: `/pulls`
+   * selects by exact head branch, not by prefix, and release-please's branches
+   * are only known by their prefix. So the list is read whole.
+   *
+   * The order is GitHub's default, newest first, and deliberately left alone.
+   * A standing release pull request is opened afresh after each release, so in
+   * a repository that actually releases it is among the *newest* open — while
+   * in one where nobody merges it, it is among the oldest. Neither end is
+   * reliably the right one to read first, and no ordering makes the page cap
+   * safe, so the cap reports itself instead of quietly dropping the tail.
    */
   async openPullRequests() {
     const prs = [];
-    for (let page = 1; page <= 10; page++) {
+    for (let page = 1; page <= OPEN_PR_PAGES; page++) {
       const batch = await this.request("GET", this.repoPath(`/pulls?state=open&per_page=100&page=${page}`));
       for (const pr of batch) {
         prs.push({ headRefName: pr.head?.ref ?? "", url: pr.html_url ?? "" });
       }
-      if (batch.length < 100) break;
+      if (batch.length < 100) return { prs, complete: true };
     }
-    return prs;
+    return { prs, complete: false };
   }
   /**
    * pullRequestFiles lists the files a pull request changes.
@@ -61747,28 +61753,43 @@ function readPackages(config, manifest) {
   });
 }
 async function namePackages(manifest, packages) {
+  const derived = packages.filter((pkg) => !pkg.component && pkg.includeComponent);
   const build = manifest.getStrategiesByPath;
-  if (typeof build !== "function") return [...packages];
+  if (typeof build !== "function") return withoutSeam(packages, derived, "gone");
+  let strategies;
   try {
-    const strategies = await build.call(manifest);
-    return await Promise.all(
-      packages.map(async (pkg) => {
-        const strategy = strategies[pkg.path];
-        if (!strategy) return pkg;
-        const [name2, releaseComponent] = await Promise.all([
-          strategy.getBranchComponent(),
-          strategy.getComponent()
-        ]);
-        return {
-          ...pkg,
-          component: pkg.component || name2 || "",
-          releaseComponent: releaseComponent ?? ""
-        };
-      })
-    );
-  } catch {
-    return [...packages];
+    strategies = await build.call(manifest);
+  } catch (error) {
+    return withoutSeam(packages, derived, `unusable (${String(error)})`);
   }
+  return await Promise.all(
+    packages.map(async (pkg) => {
+      const strategy = strategies[pkg.path];
+      if (!strategy) {
+        if (!pkg.component && pkg.includeComponent) {
+          throw new SeamError(
+            `release-please built no strategy for the package \`${pkg.path}\`, whose config names no component, so the name its releases are attributed to cannot be known. Every projected release for it would be dropped from the comment.`
+          );
+        }
+        return pkg;
+      }
+      const [name2, releaseComponent] = await Promise.all([
+        strategy.getBranchComponent(),
+        strategy.getComponent()
+      ]);
+      return {
+        ...pkg,
+        component: pkg.component || name2 || "",
+        releaseComponent: releaseComponent ?? ""
+      };
+    })
+  );
+}
+function withoutSeam(packages, derived, state) {
+  if (derived.length === 0) return [...packages];
+  throw new SeamError(
+    `release-please's \`Manifest.getStrategiesByPath\` is ${state}, and ${derived.map((p) => `\`${p.path}\``).join(", ")} name no component in release-please-config.json, so the name their releases are attributed to cannot be known. Every projected release for them would be dropped from the comment.`
+  );
 }
 function toReleases(prs, releaseBranchPrefix) {
   const releases = [];
@@ -62382,11 +62403,16 @@ async function post(client, number, header, body) {
     const result = await stick(client, number, header, body);
     notice(`projected-releases comment ${result.action} (#${result.id})`);
   } catch (error) {
-    if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
+    if (error instanceof ApiError && error.status === 403) {
       warning(
         "could not post the projected-releases comment: the token cannot write to this pull request. A pull request from a fork gets a read-only token; see the fork-safe workflow in the README. The projection is in this run's job summary."
       );
       return;
+    }
+    if (error instanceof ApiError && error.status === 404) {
+      throw new Error(
+        `could not post the projected-releases comment: pull request #${number} was not found. Check the \`number\` input, and that the token can see this repository.`
+      );
     }
     throw error;
   }
@@ -62418,10 +62444,13 @@ async function standingReleasePrs(client, env) {
   if (!boolInput("link-release-prs", true, env)) return /* @__PURE__ */ new Map();
   try {
     const prefix = input("release-branch-prefix", env);
-    return indexReleasePrs(
-      await client.openPullRequests(),
-      prefix || void 0
-    );
+    const open = await client.openPullRequests();
+    if (!open.complete) {
+      warning(
+        "this repository has more open pull requests than one run reads, so a release pull request may be missing from the listing and the version it holds may go unlinked. Set `link-release-prs: false` to drop the links altogether."
+      );
+    }
+    return indexReleasePrs(open.prs, prefix || void 0);
   } catch (error) {
     warning(`could not list the open release pull requests: ${String(error)}`);
     return /* @__PURE__ */ new Map();

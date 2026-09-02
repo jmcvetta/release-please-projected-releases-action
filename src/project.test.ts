@@ -12,8 +12,10 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { setLogger } from "release-please";
 import { fakeScm, RELEASE_SHA } from "./fake-scm.fixture.js";
-import { project } from "./project.js";
+import { namePackages, project, readPackages } from "./project.js";
 import type { Projection } from "./project.js";
+import { SeamError } from "./pr-view.js";
+import type { Manifest } from "release-please";
 import { render } from "./render.js";
 
 beforeAll(() => {
@@ -540,5 +542,64 @@ describe("a release for a component the pull request does not touch", () => {
     });
     expect(out).toContain("`acme-api@v2.5.0`");
     expect(out).toContain("`acme-ui@v2.5.0`");
+  });
+});
+
+// `namePackages` reaches for a private method, and the version that holds it
+// is pinned -- so the seam only ever moves on an upgrade, on a pull request
+// someone is looking at. What it must not do is move quietly: a package left
+// without the name its releases are attributed to matches no release, and the
+// comment then reports "None" for a merge that would really cut a tag.
+describe("the strategies namePackages joins on", () => {
+  const NAMED = readPackages(
+    { packages: { api: { component: "acme-api" } } },
+    { api: "2.4.1" },
+  );
+  const DERIVED = readPackages(
+    { packages: { api: { "release-type": "node" } } },
+    { api: "2.4.1" },
+  );
+  /** absent is a Manifest from a release-please that no longer offers it. */
+  const absent = {} as Manifest;
+
+  it("fails rather than reporting no release, when a name is needed", async () => {
+    await expect(namePackages(absent, DERIVED)).rejects.toBeInstanceOf(SeamError);
+    await expect(namePackages(absent, DERIVED)).rejects.toThrow("getStrategiesByPath");
+  });
+
+  it("names the packages that would have gone unnamed", async () => {
+    await expect(namePackages(absent, DERIVED)).rejects.toThrow("`api`");
+  });
+
+  it("carries on when every package spells its own component", async () => {
+    // Nothing to derive, so the configured names are already the right ones
+    // and losing the seam costs nothing worth failing a run over.
+    expect(await namePackages(absent, NAMED)).toEqual(NAMED);
+  });
+
+  it("fails when the method is there but throws", async () => {
+    const broken = {
+      getStrategiesByPath: () => Promise.reject(new Error("moved")),
+    } as unknown as Manifest;
+    await expect(namePackages(broken, DERIVED)).rejects.toBeInstanceOf(SeamError);
+  });
+
+  it("fails when the method answers without the package", async () => {
+    const empty = {
+      getStrategiesByPath: () => Promise.resolve({}),
+    } as unknown as Manifest;
+    await expect(namePackages(empty, DERIVED)).rejects.toThrow("no strategy");
+    expect(await namePackages(empty, NAMED)).toEqual(NAMED);
+  });
+
+  // A package that keeps its component out of its tags reports no component
+  // whatever the config calls it, so the empty name is the right answer
+  // rather than a missing one.
+  it("needs no name for a package that tags without a component", async () => {
+    const untagged = readPackages(
+      { packages: { ".": { "release-type": "node" } }, "include-component-in-tag": false },
+      { ".": "2.4.1" },
+    );
+    expect(await namePackages(absent, untagged)).toEqual(untagged);
   });
 });
