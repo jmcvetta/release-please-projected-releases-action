@@ -1,0 +1,88 @@
+# Cut releases from Conventional Commit subjects on master.
+#
+# Single package, so this is release-please's plain mode rather than the
+# manifest mode a monorepo needs: `release-type: node` makes the action call
+# `Manifest.fromConfig`, which builds its configuration from these inputs and
+# reads no release-please-config.json or .release-please-manifest.json. The
+# version lives in package.json, which the node releaser bumps along with the
+# lockfile and CHANGELOG.md.
+#
+# The first release is 1.0.0. With no prior tag release-please uses its
+# initial version rather than bumping package.json's 0.0.0, which is what an
+# action wants: consumers pin `@v1`.
+name: Release Please
+
+on:
+  push:
+    branches: [master]
+
+# Nothing at the top level; the job below takes what it needs.
+permissions: {}
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      # Open and groom the release pull request, write the tag, and move the
+      # major and minor tags onto it.
+      contents: write
+      pull-requests: write
+      # release-please labels its pull request and comments after releasing,
+      # and both go through the Issues API.
+      issues: write
+    steps:
+      # GitHub suppresses workflow events for anything pushed with the default
+      # token, so a release pull request opened with GITHUB_TOKEN arrives with
+      # no checks -- on the one pull request whose merge cuts a permanent tag.
+      # A GitHub App is a distinct identity, so `test` runs on it normally.
+      #
+      # Optional. Set the repository variable RELEASE_BOT_APP_ID and the
+      # secret RELEASE_BOT_PRIVATE_KEY to use one; without them this step is
+      # skipped and the fallback below is the default token, which works and
+      # costs the checks on that pull request.
+      - id: app-token
+        if: vars.RELEASE_BOT_APP_ID != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - id: release
+        uses: googleapis/release-please-action@v5
+        with:
+          release-type: node
+          token: ${{ steps.app-token.outputs.token || github.token }}
+
+      # An action is pinned by its major tag, so `v1` has to move onto each
+      # release for `uses: ...@v1` to mean anything. release-please writes
+      # only the exact tag.
+      - uses: actions/checkout@v5
+        if: steps.release.outputs.release_created == 'true'
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || github.token }}
+      - name: Move the major and minor tags onto the release
+        if: steps.release.outputs.release_created == 'true'
+        # Through the environment rather than interpolated into the shell
+        # line. These particular outputs are numbers, so the upstream recipe's
+        # interpolation is safe, but a workflow that runs `${{ }}` inside a
+        # shell command is one edit away from not being.
+        env:
+          MAJOR: ${{ steps.release.outputs.major }}
+          MINOR: ${{ steps.release.outputs.minor }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for alias in "v$MAJOR" "v$MAJOR.$MINOR"; do
+            # Annotated and forced, so the alias moves rather than erroring on
+            # the second release. `git push --force` on a tag is the whole
+            # point here; it is what "v1 follows the latest v1.x" means.
+            git tag -f -a "$alias" -m "Release $alias ($TAG)" "$TAG"
+            git push --force origin "refs/tags/$alias"
+          done

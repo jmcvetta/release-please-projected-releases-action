@@ -1,0 +1,56 @@
+# Run this action on its own pull requests.
+#
+# Dogfooding, and not only for the look of it: the two things that decide
+# what a merge releases -- the Conventional Commit type in the title and the
+# files the branch touches -- are exactly as invisible here as anywhere else,
+# and this repository releases on every `feat:` and `fix:` that lands.
+#
+# `uses: ./` rather than a pinned version, so the projection a pull request
+# shows is produced by that pull request's own code. A change that breaks the
+# comment breaks its own comment, which is the most direct test this action
+# has: the unit tests drive it against fixtures, and this drives it against a
+# real repository and a real release-please.
+#
+# It works at all because the action supports release-please's non-manifest
+# mode. This repository has no release-please-config.json -- it is one
+# package, released with `release-type: node` (see release-please.yml) -- so
+# before that support existed the action could not read its own repository.
+name: Projected Releases
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: projected-releases-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    # Not on release-please's own release pull requests. Merging one cuts its
+    # tag from the changelog and version already written into the branch,
+    # never from the type in the title, so the model this action applies does
+    # not describe it.
+    if: ${{ !startsWith(github.event.pull_request.head.ref, 'release-please--') }}
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # Full history, so the changed-file diff runs from the merge base rather
+      # than falling back to the API's capped file list.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      # The bundle is committed, so there is nothing to install: `uses: ./`
+      # runs dist/index.mjs straight out of the checkout. CI's staleness check
+      # in test.yml is what keeps that file equal to src/.
+      - uses: ./
+        with:
+          # Matches release-please.yml. Both name the mode this repository
+          # releases in, and they have to agree: the projection is only about
+          # the release the other one will cut.
+          release-type: node

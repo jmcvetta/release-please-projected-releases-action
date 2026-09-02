@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setLogger } from "release-please";
 import { fakeScm } from "./fake-scm.fixture.js";
-import { buildComment } from "./run.js";
+import { buildComment, graphqlRoot } from "./run.js";
 
 beforeAll(() => {
   const quiet = () => {};
@@ -156,5 +156,30 @@ describe("buildComment", () => {
     const out = await comment("feat: a thing");
     expect(out).toContain("Projected for `abcdef1`");
     expect(out).toContain("re-rendered 2026-09-01 12:00 UTC");
+  });
+});
+
+describe("graphqlRoot", () => {
+  // release-please hands this to Octokit as `baseUrl` and Octokit appends
+  // `/graphql`, so the value has to be the API root. A runner's
+  // GITHUB_GRAPHQL_URL and `${{ github.graphql_url }}` are both the endpoint,
+  // and passing one through unchanged asks for `/graphql/graphql` -- a bare
+  // `HttpError: Not Found` on the first merge-commit query, which is exactly
+  // how this was found.
+  it("strips the endpoint suffix a runner supplies", () => {
+    expect(graphqlRoot("https://api.github.com/graphql")).toBe(
+      "https://api.github.com",
+    );
+  });
+
+  it("leaves a root alone", () => {
+    expect(graphqlRoot("https://api.github.com")).toBe("https://api.github.com");
+  });
+
+  it("handles an Enterprise Server endpoint and a trailing slash", () => {
+    expect(graphqlRoot("https://ghe.example/api/graphql/")).toBe(
+      "https://ghe.example/api",
+    );
+    expect(graphqlRoot("https://ghe.example/api/")).toBe("https://ghe.example/api");
   });
 });

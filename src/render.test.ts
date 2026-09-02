@@ -112,8 +112,31 @@ describe("a release this pull request does not cause", () => {
   it("moves out of the table into a note", () => {
     const out = body(absorbed);
     expect(out).toContain("No component's version changes.");
-    expect(out).toContain("stays at 2.5.0, already pending");
+    expect(out).toContain("stays at 2.5.0");
     expect(out).not.toContain("**2.5.0**");
+  });
+
+  // "Already pending" says a release pull request is standing. Claiming it
+  // without having found one contradicts the Current column in the same
+  // comment: a repository that has never released shows no current version
+  // and has no release pull request to point at. Observed on this action's
+  // own repository, which reported "stays at 1.0.0, already pending" beside
+  // "Current: —" before any release existed.
+  it("does not claim a release is pending when none was found", () => {
+    const out = body(absorbed, { base: "master" });
+    expect(out).not.toContain("already pending");
+    expect(out).toContain("`master` already releases without it");
+  });
+
+  it("says pending, and links it, when a release PR was found", () => {
+    const out = body(absorbed, {
+      releasePrs: new Map([["acme-api", "https://x/9"]]),
+    });
+    expect(out).toContain("stays at [2.5.0](https://x/9), already pending;");
+  });
+
+  it("falls back to a generic phrase when no base branch was given", () => {
+    expect(body(absorbed)).toContain("the target branch already releases without it");
   });
 
   // The feature does ship, in the notes of the version already pending.
@@ -124,9 +147,12 @@ describe("a release this pull request does not cause", () => {
   });
 
   it("tells a hidden type that it contributes nothing", () => {
-    const out = body(absorbed, { title: "docs: a note" });
+    const out = body(absorbed, { title: "docs: a note", base: "master" });
     expect(out).toContain("`docs` adds no changelog line and changes no version.");
+    expect(out).toContain("`master` releases the same versions without it.");
     expect(out).toContain("this PR does not move it.");
+    // Same overclaim as the note above, in the warning.
+    expect(out).not.toContain("already pending");
   });
 });
 
