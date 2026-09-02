@@ -1,0 +1,170 @@
+# Render the projected-releases comment body for one pull request.
+#
+# The action renders; the caller posts. Keeping the two apart means the
+# sticky-comment implementation stays the caller's choice, and the rendered
+# body can also be written to a step summary or diffed in a test.
+#
+# This is a composite action rather than a JavaScript one for as long as it
+# lives inside the repository it serves. A JavaScript action needs a committed
+# `dist/index.js`, and bundling release-please drags octokit in behind it:
+# several megabytes of vendored JavaScript in a repository this tool is on its
+# way out of. `npm ci` costs a few seconds instead. Extraction flips it, and
+# changes only this file.
+name: Projected releases
+description: >-
+  Say which release-please tags merging a pull request will cut, from the
+  Conventional Commit type in its title and the files it changes.
+
+inputs:
+  title:
+    description: The pull request title, which squash-merge makes the commit subject.
+    required: true
+  body:
+    description: The pull request description, which becomes the commit body.
+    required: false
+    default: ""
+  repository:
+    description: The repository, as owner/name.
+    required: true
+  base:
+    description: The branch the pull request targets, by name (e.g. `master`).
+    required: true
+  diff-base:
+    description: >-
+      Local git ref the changed-file diff runs against. Defaults to
+      `origin/<base>`; release-please wants the branch name, git wants a ref.
+    required: false
+    default: ""
+  head:
+    description: The pull request head ref, for the changed-file diff.
+    required: false
+    default: HEAD
+  head-sha:
+    description: The commit the projection describes, stamped in the footer.
+    required: false
+    default: ""
+  head-branch:
+    description: The pull request head branch name.
+    required: false
+    default: ""
+  number:
+    description: The pull request number, so changelog lines can link to it.
+    required: false
+    default: "0"
+  token:
+    description: >-
+      Token for release-please's reads. Needs `contents: read` only; the
+      default GITHUB_TOKEN is enough.
+    required: true
+  config-file:
+    description: Path to release-please-config.json.
+    required: false
+    default: release-please-config.json
+  manifest-file:
+    description: Path to .release-please-manifest.json.
+    required: false
+    default: .release-please-manifest.json
+  release-prs:
+    description: >-
+      Optional `<branch>\t<url>` file listing open pull requests, so a pending
+      version can link to the release PR holding it.
+    required: false
+    default: ""
+  run-url:
+    description: This workflow run, linked from the footer.
+    required: false
+    default: ""
+  output-file:
+    description: Where to write the rendered comment body.
+    required: false
+    default: projected-releases.md
+
+outputs:
+  comment-file:
+    description: The file the comment body was written to.
+    value: ${{ inputs.output-file }}
+
+runs:
+  using: composite
+  steps:
+    # No setup-node step, deliberately. Its `node-version-file` and
+    # `cache-dependency-path` are resolved against the workspace, while
+    # `github.action_path` is absolute, so the two concatenate into a path
+    # that does not exist -- and the action cannot know its own
+    # workspace-relative location to write instead. Runners ship a Node new
+    # enough for this package, so the runner's is used and the version
+    # requirement is checked below rather than installed.
+    #
+    # The cost is `npm ci` without a cache on every run. That is a few
+    # seconds on an advisory comment, and the alternative -- hoisting
+    # setup-node into every caller's workflow -- would undo the point of
+    # packaging this as an action at all.
+    - name: Check the runner's Node against the package's engines
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        # The first run of digits in `engines.node`, so the requirement is
+        # declared once by the package rather than restated here. Matched
+        # rather than stripped: ">=22" starts with a non-digit, so stripping
+        # from the first one yields the empty string, and an empty `required`
+        # compares as zero -- a guard that always passes.
+        required=$(node -p \
+          "(require('$ACTION_PATH/package.json').engines.node.match(/\\d+/) || [''])[0]")
+        actual=$(node -p "process.versions.node.split('.')[0]")
+        if [[ ! "$required" =~ ^[0-9]+$ ]]; then
+          echo "::error::could not read a major version from engines.node" >&2
+          exit 1
+        fi
+        if (( actual < required )); then
+          echo "::error::projected-releases needs Node >= $required;" \
+            "this runner has $actual. Add actions/setup-node to the workflow." >&2
+          exit 1
+        fi
+        echo "node $actual satisfies >= $required"
+    - run: npm ci && npm run build
+      shell: bash
+      working-directory: ${{ github.action_path }}
+    # The title and body reach the tool through the environment and a file,
+    # never through `${{ }}` interpolated into a shell line: a pull request
+    # title is attacker-controlled text, and interpolation would run it.
+    - shell: bash
+      env:
+        PR_TITLE: ${{ inputs.title }}
+        PR_BODY: ${{ inputs.body }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+        ACTION_PATH: ${{ github.action_path }}
+        REPOSITORY: ${{ inputs.repository }}
+        BASE: ${{ inputs.base }}
+        DIFF_BASE: ${{ inputs.diff-base }}
+        HEAD: ${{ inputs.head }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+        HEAD_BRANCH: ${{ inputs.head-branch }}
+        PR_NUMBER: ${{ inputs.number }}
+        CONFIG_FILE: ${{ inputs.config-file }}
+        MANIFEST_FILE: ${{ inputs.manifest-file }}
+        RUN_URL: ${{ inputs.run-url }}
+        RELEASE_PRS: ${{ inputs.release-prs }}
+        OUT: ${{ inputs.output-file }}
+      run: |
+        printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
+        # The two optional flags go through an array rather than
+        # `${VAR:+--flag "$VAR"}`: that form word-splits its expansion, so a
+        # value containing a space would arrive as two arguments.
+        optional=()
+        [[ -n "$DIFF_BASE" ]] && optional+=(--diff-base "$DIFF_BASE")
+        [[ -n "$RELEASE_PRS" ]] && optional+=(--release-prs "$RELEASE_PRS")
+        node "$ACTION_PATH/dist/main.js" \
+          --title "$PR_TITLE" \
+          --body-file "$RUNNER_TEMP/pr-body.md" \
+          --repo "$REPOSITORY" \
+          --base "$BASE" \
+          --head "$HEAD" \
+          --head-sha "$HEAD_SHA" \
+          --head-branch "$HEAD_BRANCH" \
+          --number "$PR_NUMBER" \
+          --config-file "$CONFIG_FILE" \
+          --manifest-file "$MANIFEST_FILE" \
+          --run-url "$RUN_URL" \
+          "${optional[@]}" \
+          --out "$OUT"

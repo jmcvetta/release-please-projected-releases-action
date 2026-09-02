@@ -1,0 +1,361 @@
+/**
+ * These tests drive real release-please against fixtures.
+ *
+ * Every assertion below is a measurement, not a reading of upstream source.
+ * That distinction is the reason this package exists: the implementation it
+ * replaces mirrored five release-please rules in another language, and two of
+ * them were mirrored backwards — hidden types were believed to release, and a
+ * miscased type was believed to fail outright. Reading the source produced
+ * both errors; running it produced both corrections.
+ */
+
+import { beforeAll, describe, expect, it } from "vitest";
+import { setLogger } from "release-please";
+import { fakeScm, RELEASE_SHA } from "./fake-scm.fixture.js";
+import { project } from "./project.js";
+import type { Projection } from "./project.js";
+
+beforeAll(() => {
+  const quiet = () => {};
+  setLogger({
+    debug: quiet,
+    info: quiet,
+    warn: quiet,
+    error: quiet,
+    trace: quiet,
+    fatal: quiet,
+  } as Parameters<typeof setLogger>[0]);
+});
+
+const CONFIG = {
+  "separate-pull-requests": true,
+  packages: {
+    api: {
+      "release-type": "simple",
+      component: "acme-api",
+      "include-component-in-tag": true,
+      "tag-separator": "@",
+    },
+    ui: {
+      "release-type": "simple",
+      component: "acme-ui",
+      "include-component-in-tag": true,
+      "tag-separator": "@",
+    },
+  },
+};
+const MANIFEST = { api: "2.4.1", ui: "1.0.0" };
+
+/** run projects one pull request title/body against the fixture repository. */
+async function run(
+  title: string,
+  body = "",
+  files = ["api/src/x.ts"],
+  commits: { message: string; files: string[] }[] = [],
+): Promise<Projection> {
+  return project({
+    github: fakeScm({
+      config: CONFIG,
+      manifest: MANIFEST,
+      commits: commits.map((c, i) => ({
+        sha: `feed${i}`,
+        message: c.message,
+        files: c.files,
+      })),
+    }),
+    config: CONFIG,
+    manifest: MANIFEST,
+    commit: {
+      title,
+      body,
+      files,
+      number: 7,
+      headSha: "abcdef1234567890",
+      headBranch: "topic",
+      baseBranch: "master",
+    },
+  });
+}
+
+/** versions is the projected version per component, for terse assertions. */
+function versions(projection: Projection): Record<string, string> {
+  return Object.fromEntries(
+    projection.projected.map((r) => [r.component, r.version]),
+  );
+}
+
+describe("the bump the type implies", () => {
+  it("bumps the minor for a feat", async () => {
+    expect(versions(await run("feat: a thing"))).toEqual({
+      "acme-api": "2.5.0",
+    });
+  });
+
+  it("bumps the patch for a fix", async () => {
+    expect(versions(await run("fix: a thing"))).toEqual({
+      "acme-api": "2.4.2",
+    });
+  });
+
+  it("bumps the major for a breaking change", async () => {
+    expect(versions(await run("feat!: a thing"))).toEqual({
+      "acme-api": "3.0.0",
+    });
+  });
+
+  it("treats a BREAKING CHANGE footer like the bang", async () => {
+    const p = await run("fix: a thing", "BREAKING CHANGE: the API moved");
+    expect(versions(p)).toEqual({ "acme-api": "3.0.0" });
+  });
+});
+
+describe("types that open no release at all", () => {
+  // The rule the mirrored implementation got backwards. The versioning
+  // strategy ends in a bare PatchVersionUpdate(), which reads as "everything
+  // releases"; the release is dropped later, when the notes render empty.
+  it.each(["docs", "chore", "ci", "refactor", "test", "build", "style"])(
+    "releases nothing for a hidden %s type",
+    async (type) => {
+      expect(versions(await run(`${type}: a thing`))).toEqual({});
+    },
+  );
+
+  it("releases nothing for an unrecognized type", async () => {
+    expect(versions(await run("wip: a thing"))).toEqual({});
+  });
+
+  it("releases nothing for a subject that is not a Conventional Commit", async () => {
+    expect(versions(await run("just some words"))).toEqual({});
+  });
+
+  it("lets a breaking change escape the hidden filter", async () => {
+    expect(versions(await run("docs!: a thing"))).toEqual({
+      "acme-api": "3.0.0",
+    });
+  });
+});
+
+describe("a miscased type", () => {
+  // The second rule read backwards. `Feat:` does not fail — it renders a
+  // correct-looking Features entry (the changelog preset lowercases before
+  // matching) while bumping only a patch (the versioning strategy compares
+  // the type literally). A feature ships as a patch with no error anywhere,
+  // which is why the title gate rejects anything outside the lowercase list.
+  it("renders as a feature but bumps only a patch", async () => {
+    const projection = await run("Feat: a thing");
+    expect(versions(projection)).toEqual({ "acme-api": "2.4.2" });
+    expect(projection.projected[0]?.notes).toContain("Features");
+  });
+});
+
+describe("Release-As", () => {
+  it("forces the version when the note parses as a trailer", async () => {
+    const projection = await run("fix: a thing", "Release-As: 9.9.9");
+    expect(versions(projection)).toEqual({ "acme-api": "9.9.9" });
+    expect(projection.ignoredReleaseAs).toBeUndefined();
+  });
+
+  it("escapes the hidden filter, so a docs commit can release", async () => {
+    expect(versions(await run("docs: a thing", "Release-As: 9.9.9"))).toEqual({
+      "acme-api": "9.9.9",
+    });
+  });
+
+  // The failure that cost this repository a release on 2026-08-31: an
+  // attribution footer was appended below the note, and the pull request body
+  // is the squash commit's body. release-please recomputed the original
+  // version with no error anywhere.
+  it("is silently ignored when non-trailer text follows it", async () => {
+    const body = "Release-As: 9.9.9\n\n---\n_Generated by a bot_";
+    const projection = await run("fix: a thing", body);
+    expect(versions(projection)).toEqual({ "acme-api": "2.4.2" });
+    expect(projection.ignoredReleaseAs).toBe("9.9.9");
+  });
+
+  it("survives another trailer below it", async () => {
+    const body = "Release-As: 9.9.9\nCo-authored-by: Someone <a@b.c>";
+    expect(versions(await run("fix: a thing", body))).toEqual({
+      "acme-api": "9.9.9",
+    });
+  });
+
+  it("honours a prerelease version", async () => {
+    expect(versions(await run("fix: a thing", "Release-As: 9.9.9-rc.1"))).toEqual({
+      "acme-api": "9.9.9-rc.1",
+    });
+  });
+
+  // A body that discusses the trailer is not asking for a version, and in
+  // this repository such a body is ordinary: the placement rule is
+  // documented, and the release it cost is written up. Every case below
+  // leaves release-please at the version the type implies, so warning that a
+  // note "was ignored" would be a warning about nothing.
+  it.each([
+    ["a code fence", "How to fix a bump:\n\n```\nRelease-As: 9.9.9\n```\n\nDone."],
+    ["backticks", "The footer is `Release-As: 9.9.9`, dead last."],
+    ["a blockquote", "> Release-As: 9.9.9\n\nis what #81 should have carried."],
+    ["indentation", "It ended with:\n\n    Release-As: 9.9.9\n\nand a rule below."],
+    [
+      "a placeholder version",
+      "Append the footer yourself:\n\nRelease-As: x.y.z\n\nThen merge.",
+    ],
+  ])("does not read a mention in %s as an ask", async (_what, body) => {
+    const projection = await run("fix: a thing", body);
+    expect(versions(projection)).toEqual({ "acme-api": "2.4.2" });
+    expect(projection.releaseAs).toBeUndefined();
+    expect(projection.ignoredReleaseAs).toBeUndefined();
+  });
+
+  // release-please reads a version out of a note with an unanchored match, so
+  // the prose line here is the one it honours. A note that forced a version
+  // is not an ignored note, whichever line it came from.
+  it("names the note release-please honoured, not the last one written", async () => {
+    const body = "Release-As: 1.1.1 was what we wrote before.\n\nRelease-As: 9.9.9";
+    const projection = await run("fix: a thing", body);
+    expect(versions(projection)).toEqual({ "acme-api": "1.1.1" });
+    expect(projection.releaseAs).toBe("1.1.1");
+    expect(projection.ignoredReleaseAs).toBeUndefined();
+  });
+
+  // The one placement of a placeholder that is not silent: as a real trailer
+  // it reaches Version.parse, which throws. The action fails the job rather
+  // than reporting a projection, and there is nothing here to soften that.
+  it("fails loudly on a trailer whose version does not parse", async () => {
+    await expect(run("fix: a thing", "Release-As: x.y.z")).rejects.toThrow(
+      "unable to parse version string",
+    );
+  });
+
+  // Deliberate: a bare note mid-body is the exact shape of the failure this
+  // warns about -- non-trailer text below it -- so it is read as an ask.
+  it("reads a note left above prose as one that will be ignored", async () => {
+    const body = "The commit ended with\nRelease-As: 9.9.9\nand then more prose.";
+    const projection = await run("fix: a thing", body);
+    expect(versions(projection)).toEqual({ "acme-api": "2.4.2" });
+    expect(projection.ignoredReleaseAs).toBe("9.9.9");
+  });
+});
+
+// splitFiles does not run release-please's normalizePaths over the configured
+// paths, which raises the question of what a path in some other spelling
+// does. Measured: nothing releases, because manifest.ts looks its split
+// commits up by the raw config key while CommitSplit files them under the
+// normalized one, so the component sees no commits at all. This preview's
+// "no changed file is under a component path" agrees with that, and the
+// spelling is worth catching in the config instead -- see
+// tests/test_infra_github.py.
+describe("a package path release-please would normalize", () => {
+  it.each(["api/", "/api"])("releases nothing for %s", async (path) => {
+    const config = {
+      "separate-pull-requests": true,
+      packages: {
+        [path]: {
+          "release-type": "simple",
+          component: "acme-api",
+          "include-component-in-tag": true,
+          "tag-separator": "@",
+        },
+      },
+    };
+    const manifest = { [path]: "2.4.1" };
+    const projection = await project({
+      github: fakeScm({ config, manifest, commits: [] }),
+      config,
+      manifest,
+      commit: {
+        title: "feat: a thing",
+        body: "",
+        files: ["api/src/x.ts"],
+        number: 7,
+        headSha: "abcdef1234567890",
+        headBranch: "topic",
+        baseBranch: "master",
+      },
+    });
+    expect(versions(projection)).toEqual({});
+    expect([...projection.touched.keys()]).toEqual([]);
+  });
+});
+
+describe("what is already pending on the target branch", () => {
+  it("reports a release this pull request did not cause", async () => {
+    const projection = await run("docs: a thing", "", ["api/README.md"], [
+      { message: "feat: something merged earlier", files: ["api/src/y.ts"] },
+    ]);
+    expect(versions(projection)).toEqual({ "acme-api": "2.5.0" });
+    expect(
+      Object.fromEntries(projection.pending.map((r) => [r.component, r.version])),
+    ).toEqual({ "acme-api": "2.5.0" });
+  });
+
+  it("absorbs this pull request's patch into a pending minor", async () => {
+    const projection = await run("fix: a thing", "", ["api/src/x.ts"], [
+      { message: "feat: something merged earlier", files: ["api/src/y.ts"] },
+    ]);
+    expect(versions(projection)).toEqual({ "acme-api": "2.5.0" });
+  });
+
+  it("is empty when the target branch has nothing unreleased", async () => {
+    const projection = await run("feat: a thing");
+    expect(projection.pending).toEqual([]);
+  });
+});
+
+describe("which components a pull request reaches", () => {
+  it("releases only the component whose files it touches", async () => {
+    expect(versions(await run("feat: a thing", "", ["ui/index.html"]))).toEqual(
+      { "acme-ui": "1.1.0" },
+    );
+  });
+
+  it("releases both when it touches both", async () => {
+    const projection = await run("feat: a thing", "", [
+      "api/src/x.ts",
+      "ui/index.html",
+    ]);
+    expect(versions(projection)).toEqual({
+      "acme-api": "2.5.0",
+      "acme-ui": "1.1.0",
+    });
+  });
+
+  it("releases nothing when no file is under a component path", async () => {
+    expect(versions(await run("feat: a thing", "", ["README.md"]))).toEqual({});
+  });
+});
+
+describe("the rendered notes", () => {
+  it("carries release-please's own changelog entry", async () => {
+    const projection = await run("feat: add a widget");
+    expect(projection.projected[0]?.notes).toContain("add a widget");
+  });
+});
+
+describe("the release sentinel", () => {
+  it("stops the walk at the last release", async () => {
+    // A commit below the sentinel is already released and must not count.
+    const projection = await project({
+      github: fakeScm({
+        config: CONFIG,
+        manifest: MANIFEST,
+        commits: [],
+        releases: [
+          { tagName: "acme-api@v2.4.1", sha: RELEASE_SHA },
+          { tagName: "acme-ui@v1.0.0", sha: RELEASE_SHA },
+        ],
+      }),
+      config: CONFIG,
+      manifest: MANIFEST,
+      commit: {
+        title: "docs: a thing",
+        body: "",
+        files: ["api/src/x.ts"],
+        number: 1,
+        headSha: "abc",
+        headBranch: "topic",
+        baseBranch: "master",
+      },
+    });
+    expect(projection.projected).toEqual([]);
+  });
+});

@@ -1,0 +1,7 @@
+{
+  "note": "Shared between the TypeScript action (src/conventional.ts) and tests/test_infra_github.py, which pins this repository's PR-title gate to the same list. One copy, read by both languages, because both fail quietly when they drift: too strict red-lights a title that would have released correctly, too loose lets a commit onto master that the changelog silently omits.",
+  "source": "The default `types` of conventional-changelog-conventionalcommits, which is what release-please writes notes with while this repository sets no `changelog-sections`.",
+  "visible": ["feat", "feature", "fix", "perf", "revert"],
+  "hidden": ["docs", "style", "chore", "refactor", "test", "build", "ci"],
+  "releaseBranchPrefix": "release-please--"
+}

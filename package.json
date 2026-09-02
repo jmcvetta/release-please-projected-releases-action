@@ -1,0 +1,25 @@
+{
+  "name": "projected-releases",
+  "version": "0.1.0",
+  "description": "Say on a pull request which release-please tags merging it will cut.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "rimraf dist && tsc",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "release-please": "17.11.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "esbuild": "^0.27.7",
+    "rimraf": "^6.1.3",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
