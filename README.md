@@ -190,8 +190,16 @@ bump instead of quietly degrading.
 
 ```
 npm ci
-npm run check     # typecheck, test, build
+npm run check     # typecheck, build, test
+npm run cover     # the same, with line coverage on the test leg
 ```
+
+`cover` runs `check` rather than restating it, and switches coverage on
+through a variable the test script reads. That is the whole reason it is one
+line: an entry point written as "the coverage variant of `check`" would be a
+copy, and a copy has no way to notice when `check` grows a leg. CI runs the
+same test script with the same variable set, and posts what the change left
+uncovered as a comment on the pull request.
 
 `dist/index.mjs` is committed, because a JavaScript action runs the file the
 caller checked out with no install step. CI rebuilds it and fails a pull

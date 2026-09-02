@@ -9,8 +9,9 @@
   "scripts": {
     "build": "node scripts/bundle.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
-    "test": "vitest run",
-    "check": "npm run typecheck && npm run build && npm run test"
+    "test": "vitest run ${VITEST_COVER:-}",
+    "check": "npm run typecheck && npm run build && npm run test",
+    "cover": "VITEST_COVER=--coverage npm run check"
   },
   "dependencies": {
     "release-please": "17.11.2"
@@ -28,6 +29,7 @@
   "private": true,
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "@vitest/coverage-v8": "^4.1.10",
     "esbuild": "^0.27.7",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10",

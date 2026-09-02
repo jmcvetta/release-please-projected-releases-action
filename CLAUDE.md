@@ -117,6 +117,36 @@ PR_BODY`, squash-only. So the PR **title** becomes the commit subject
 release-please parses, and the PR **body** becomes the commit body carrying
 any `Release-As:` trailer. Check both before merging.
 
+## A variant entry point calls the original; it never copies it
+
+`npm run cover` is `VITEST_COVER=--coverage npm run check`, and `npm test` is
+`vitest run ${VITEST_COVER:-}`. So coverage is a flag one command line reads,
+and there is no second command line anywhere that could fall behind the first.
+
+`jmcvetta/career` paid for this rule (its #64). Its `make cover` was written
+as "the coverage variant of `test`" and duplicated `test`'s pytest line. Then
+`test` grew a Ruby leg and two TypeScript legs, and `cover` did not, because a
+copy has no way to notice. CI ran `cover`, so 1045 vitest tests went unrun by
+the required check while every pull request stayed green.
+
+The same shape is available here: `check` chains typecheck, build and test,
+and the build has to come before the test because `src/bundle.test.ts` runs
+`dist/index.mjs`. An entry point that restated any of that would be one edit
+away from restating it wrongly.
+
+Coverage is scoped to `src/`, excluding `*.test.ts` and `*.fixture.ts`.
+`dist/index.mjs` is 2.4 MB of vendored release-please and would drown the
+number; `scripts/bundle.mjs` is a build script whose real test is that the
+committed bundle equals the source, which packaging.test.ts and CI's staleness
+check already prove.
+
+The pull request comment is sticky under the name `coverage`, deliberately
+distinct from projected-releases.yml's `projected-releases` header. Both
+comments live on the same pull request under the same bot identity, so a
+sticky comment that matched on "my newest comment" rather than on its own
+hidden marker would edit the other one. That is what `src/comment.ts` is
+careful about, and why.
+
 ## Bundling breaks things no unit test sees
 
 Three times now, and always the same shape: a dependency's ordinary runtime

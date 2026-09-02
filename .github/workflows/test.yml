@@ -5,6 +5,10 @@
 # changes src/ without rebuilding ships nothing: the tests pass, review passes,
 # and the action keeps running the old code. Rebuilding here and failing on a
 # diff makes that impossible to merge by accident.
+#
+# The test leg also measures coverage here and leaves it as a comment on the
+# pull request. Coverage is a flag the ordinary test script reads rather than
+# a script of its own, so the thing CI measures stays the thing a laptop runs.
 name: Test
 
 on:
@@ -22,6 +26,11 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # pull-requests: write lets the coverage step below maintain its sticky
+    # comment; everything else keeps the read-only default above.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -44,7 +53,40 @@ jobs:
             exit 1
           fi
 
+      # The same test leg as a laptop runs, with coverage switched on by the
+      # variable the script reads. Not a second script that restates this
+      # command line: a copy has no way to notice when the original grows a
+      # leg, and CI running the copy is how a sibling repository left 1045
+      # tests unrun behind a green required check.
       - run: npm test
+        env:
+          VITEST_COVER: --coverage
+
+      # What this change left uncovered, as one sticky comment on the pull
+      # request. Diff-aware on purpose -- `file-coverage-mode: changes`, its
+      # default -- because a repository-wide percentage is read once and then
+      # never again, while "these lines you just wrote are untested" is about
+      # the change under review.
+      #
+      # It keys on its own hidden marker, under a name distinct from the
+      # `projected-releases` header that projected-releases.yml sticks on the
+      # same pull request under the same bot identity. Two sticky comments
+      # that matched on "my newest comment" instead would overwrite each
+      # other's body on every push.
+      #
+      # Skipped for pull requests from forks, where GITHUB_TOKEN is read-only
+      # by design and the write below would fail the check over something the
+      # contributor cannot fix. The coverage report is still in the log above.
+      #
+      # MIT-licensed, and pinned by commit SHA (v2.9.3) rather than by tag: a
+      # tag can be moved onto different code, a SHA cannot.
+      - name: Comment the coverage this change leaves
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        uses: davelosert/vitest-coverage-report-action@2500dafcee7dd64f85ab689c0b83798a8359770e # v2.9.3
+        with:
+          name: coverage
 
       # The bundle is where this action fails in the way nothing else catches.
       # esbuild leaves the CommonJS `require` calls it cannot resolve to a stub
