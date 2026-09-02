@@ -545,6 +545,24 @@ describe("a release for a component the pull request does not touch", () => {
   });
 });
 
+// `Release-As:` escapes the hidden-type filter: the note is what makes the
+// changelog non-empty, so a `chore:` carrying one really does cut a release.
+// Measured, because reading `changelogEmpty` suggests the opposite -- and the
+// opposite would mean the "was ignored" warning fires on a note that was
+// honoured, diagnosing a placement bug that is not there.
+describe("a hidden type carrying a Release-As note", () => {
+  it("releases the version the note asks for", async () => {
+    const projection = await run("chore: a thing", "Release-As: 2.0.0");
+    expect(versions(projection)).toEqual({ "acme-api": "2.0.0" });
+  });
+
+  it("does not warn that the note was ignored", async () => {
+    const projection = await run("chore: a thing", "Release-As: 2.0.0");
+    expect(projection.releaseAs).toBe("2.0.0");
+    expect(projection.ignoredReleaseAs).toBeUndefined();
+  });
+});
+
 // `namePackages` reaches for a private method, and the version that holds it
 // is pinned -- so the seam only ever moves on an upgrade, on a pull request
 // someone is looking at. What it must not do is move quietly: a package left
