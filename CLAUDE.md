@@ -155,12 +155,15 @@ Measured on this repository's own #1 by running release-please's
 | trailer, then `---------`, then `Co-authored-by:` | **absent** |
 | trailer, then `---` | **absent** |
 
-#1's stored body was correct and verified correct before merging. It still
-released as 1.0.0, because the corruption happened at squash time, in a
-message nobody had looked at yet. So verifying the stored body is necessary
-and not sufficient: **the last thing to check is the merge box itself, which
-is editable.** Delete the `---------` block there, or move the trailer below
-it, before confirming the merge.
+#1's stored body was correct and verified correct before merging. The trailer
+was voided anyway, because the corruption happened at squash time, in a
+message nobody had looked at yet: release-please computed its default first
+version of 1.0.0 and staged it on its release branch. Nothing was released --
+no tag has been cut -- so the version is still recoverable, but not by
+anything that was checked before the merge. Verifying the stored body is
+necessary and not sufficient: **the last thing to check is the merge box
+itself, which is editable.** Delete the `---------` block there, or move the
+trailer below it, before confirming the merge.
 
 ## The release job needs permission to open a pull request
 
@@ -181,6 +184,7 @@ sidesteps the setting entirely and is worth it for a second reason: GitHub
 suppresses workflow events for anything pushed with the default token, so a
 release pull request opened with it arrives with no checks -- on the one pull
 request whose merge cuts a permanent tag.
+
 ## A variant entry point calls the original; it never copies it
 
 `npm run cover` is `VITEST_COVER=--coverage npm run check`, and `npm test` is
