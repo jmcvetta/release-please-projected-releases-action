@@ -117,6 +117,26 @@ PR_BODY`, squash-only. So the PR **title** becomes the commit subject
 release-please parses, and the PR **body** becomes the commit body carrying
 any `Release-As:` trailer. Check both before merging.
 
+## The repository's own settings live in `infra/github`
+
+Merge strategy, the `master` ruleset, whether Actions may open a pull request:
+OpenTofu, applied by hand, reviewed as a diff. So the squash settings above are
+not folklore about what someone once clicked -- they are declared in
+`infra/github/main.tf` next to the reason they matter, and a plan that is not
+`No changes.` says someone changed one in the web UI.
+
+Two things it is worth knowing before editing that stack, both written up in
+`infra/github/README.md`: the state file is **committed**, which constrains
+what may be added to it (this repository is public, so state is world-readable
+and nothing credential-bearing belongs in it); and `required_status_checks` is
+deliberately absent from the ruleset, because the release pull request is
+opened with the default token and so never receives the check that would be
+required.
+
+`npm run check:infra` validates the configuration without credentials, and CI
+runs it. It is not part of `npm run check`, which must not start requiring
+OpenTofu on a laptop.
+
 ## A variant entry point calls the original; it never copies it
 
 `npm run cover` is `VITEST_COVER=--coverage npm run check`, and `npm test` is

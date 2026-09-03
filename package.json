@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run ${VITEST_COVER:-}",
     "check": "npm run typecheck && npm run build && npm run test",
+    "check:infra": "cd infra/github && tofu fmt -check -recursive . && tofu init -backend=false && tofu validate",
     "cover": "VITEST_COVER=--coverage npm run check"
   },
   "dependencies": {
