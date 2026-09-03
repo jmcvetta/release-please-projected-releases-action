@@ -78,16 +78,21 @@ here than in a private repository, because this one is public and its state is
 therefore world-readable.
 
 The reflex against committed state comes from state files that hold database
-passwords and generated keys. **This stack holds none, by construction.** Every
-resource it manages is something already public:
+passwords and generated keys. **This stack holds none, by construction.** What
+it does hold, in full:
 
-| Resource | What is in state |
-|---|---|
-| `github_repository` | repo name and feature flags — public metadata |
-| `github_repository_ruleset` | the branch-protection rules, readable from the API |
-| `github_repository_vulnerability_alerts` | a boolean |
-| `github_repository_dependabot_security_updates` | a boolean |
-| `github_workflow_repository_permissions` | two Actions settings |
+| Resource | What is in state | Readable without admin? |
+|---|---|---|
+| `github_repository` | name, ids, clone URLs, feature flags | yes, it is public metadata |
+| `github_repository_ruleset` | the branch-protection rules | yes |
+| `github_repository_vulnerability_alerts` | a boolean | no |
+| `github_repository_dependabot_security_updates` | a boolean | no |
+| `github_workflow_repository_permissions` | two Actions settings | no |
+
+The last three are settings the API will not hand an anonymous reader, so
+committing the state publishes them. That is a disclosure and not an accident:
+they say that Dependabot is on and that a workflow token is read-only unless a
+job asks for more. Neither is a thing anyone can use.
 
 Against that, the alternatives cost more than they return. An S3 backend means
 an AWS account this repository has no other reason to touch; a hosted backend
@@ -99,7 +104,7 @@ resolvable by re-importing.
 
 ### The rule that keeps this safe
 
-**Only add resources whose values are already public.**
+**Only add resources whose values are safe to publish.**
 
 This is a constraint on future edits, not a one-time observation. Committed
 state is a durable artifact: git history is append-only in practice, so a
@@ -107,8 +112,10 @@ credential committed once is not fixed by deleting it in a later commit — it
 stays in the history of every clone and of every fork. This repository being
 public means there is no blast radius to limit.
 
-So adding anything credential-bearing — `github_actions_secret`, a webhook with
-a token, a deploy key — means **moving state off-repo first**, not making an
+The test is not whether a field is labelled secret. It is whether the value
+does anything for someone who has it: a token, a key, a webhook URL that
+accepts requests. Adding a resource that carries one — `github_actions_secret`,
+a webhook, a deploy key — means **moving state off-repo first**, not making an
 exception for the one resource.
 
 ## What is not managed here, and why

@@ -141,11 +141,19 @@ did not agree on what:
 |---|---|
 | `cd3ef99` (#1) | the trailer, then `---------`, then `Co-authored-by:` |
 | `7594442` (#7) | `Co-authored-by:` with no rule before it |
+| `a8b5a8f` (#11) | the trailer, then `---------`, then `Co-authored-by:` |
 
 Neither `---------` nor the co-author line was in the stored body. What
 decides the difference is **not established** -- do not write down a cause
 here without measuring one. What is established is the consequence: a rule
 below the trailer voids the note, a bare `Co-authored-by:` does not.
+
+**#11 was the pull request written to fix #1's voided trailer, and it was
+voided in exactly the same way**, having been merged without editing the merge
+box. Two for three now. So this is the common case rather than the accident,
+and a `Release-As:` trailer that reaches `master` through an unedited merge box
+should be expected to do nothing. The release pull request it produced asks for
+1.0.0, which is the number the trailer existed to prevent.
 
 Measured on this repository's own #1 by running release-please's
 `parseConventionalCommits` over each shape:
