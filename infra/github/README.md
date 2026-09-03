@@ -29,9 +29,9 @@ A clean checkout plans as **`No changes.`** Anything else means either someone
 changed a setting in the web UI, or a change here has not been applied yet —
 the plan output tells you which.
 
-`imports.tf` adopts the resources that predate this stack, so an apply against
-empty state rebuilds it rather than trying to create a repository that is
-already there. Only the ruleset is created outright.
+`imports.tf` adopts every resource here by id, so an apply against empty state
+rebuilds the stack rather than trying to create a repository that is already
+there.
 
 ### The provider lock has to be what init produces
 

@@ -14,11 +14,10 @@
 # rather than being deleted after the first run: they are also what makes a
 # rebuild from lost state a plain apply.
 #
-# github_repository_ruleset.master has no block because it does not exist yet.
-# It is created by the apply, which is the safe direction -- nothing to destroy
-# first, so no window in which master is less protected than it was. Add its
-# block, with id "release-please-projected-releases-action:<ruleset_id>", if
-# state is ever lost after it has been created.
+# The ruleset was the one resource this stack created rather than adopted --
+# there was none on the repository before it. Created, it has an id like the
+# rest, so it is listed here too: with all five present, rebuilding from lost
+# state is an apply and not a procedure.
 
 import {
   to = github_repository.projected_releases
@@ -38,4 +37,9 @@ import {
 import {
   to = github_workflow_repository_permissions.projected_releases
   id = "release-please-projected-releases-action"
+}
+
+import {
+  to = github_repository_ruleset.master
+  id = "release-please-projected-releases-action:22177376"
 }

@@ -94,11 +94,11 @@ resource "github_workflow_repository_permissions" "projected_releases" {
 # classic branch protection. The distinction matters: classic protection cannot
 # express allowed_merge_methods, which is the squash-only invariant above.
 #
-# This one does not exist yet -- CLAUDE.md's "never push to master" has been a
-# rule with no mechanism behind it. Creating it is therefore an apply, not an
-# import, and unlike the repository above it is safe to create: there is no
-# existing ruleset to destroy first, and so no window in which master is less
-# protected than it was.
+# This is the one resource the stack created rather than adopted: there was no
+# ruleset on the repository before it, so CLAUDE.md's "never push to master"
+# was a rule with no mechanism behind it. Creating one was the safe direction
+# -- nothing to destroy first, and so no window in which master was less
+# protected than it had been.
 resource "github_repository_ruleset" "master" {
   name        = "master"
   repository  = github_repository.projected_releases.name
