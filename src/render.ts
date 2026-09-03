@@ -289,6 +289,12 @@ function buildRows(projection: Projection): {
  * neither is anywhere else in the comment — this repository's own component
  * is `release-please-projected-releases-action` and its tag is `v0.2.0`.
  *
+ * **Path** appears only where the rows do not share one. It answers "which of
+ * these components claimed the file", a question a single-package repository
+ * does not have: plain mode configures its one package from `release-type:`
+ * and gives it the repository root, so the column would be `.` repeated for
+ * as many rows as there are, which is one.
+ *
  * **Without this PR** is what the target branch releases on its own, which is
  * a weaker claim than "already pending": the release pull request listing is
  * skipped by `link-release-prs: false` and degrades to empty when the call
@@ -296,21 +302,32 @@ function buildRows(projection: Projection): {
  * and otherwise just states the version.
  */
 function table(rows: readonly Row[], options: RenderOptions): string[] {
+  const showPath = new Set(rows.map((r) => r.pkg.path)).size > 1;
+  const columns = [
+    "Component",
+    ...(showPath ? ["Path"] : []),
+    "Files",
+    "Current",
+    "Without this PR",
+    "Projected",
+    "Tag",
+  ];
   const out = [
-    "| Component | Path | Files | Current | Without this PR | Projected | Tag |",
-    "| --- | --- | --- | --- | --- | --- | --- |",
+    `| ${columns.join(" | ")} |`,
+    `| ${columns.map(() => "---").join(" | ")} |`,
   ];
   for (const row of rows) {
     const version = row.projected?.version;
-    out.push(
-      `| ${code(row.pkg.component)}` +
-        ` | ${code(row.pkg.path)}` +
-        ` | ${row.files.length || "—"}` +
-        ` | ${row.pkg.current ?? "—"}` +
-        ` | ${pendingCell(row, options)}` +
-        ` | ${projectedCell(row)}` +
-        ` | ${version === undefined ? "—" : `\`${tagFor(row.pkg, version)}\``} |`,
-    );
+    const cells = [
+      code(row.pkg.component),
+      ...(showPath ? [code(row.pkg.path)] : []),
+      String(row.files.length || "—"),
+      row.pkg.current ?? "—",
+      pendingCell(row, options),
+      projectedCell(row),
+      version === undefined ? "—" : `\`${tagFor(row.pkg, version)}\``,
+    ];
+    out.push(`| ${cells.join(" | ")} |`);
   }
   return out;
 }

@@ -62085,15 +62085,32 @@ function buildRows(projection) {
   return { rows: [...rows, ...invented], unmatched };
 }
 function table(rows, options) {
+  const showPath = new Set(rows.map((r) => r.pkg.path)).size > 1;
+  const columns = [
+    "Component",
+    ...showPath ? ["Path"] : [],
+    "Files",
+    "Current",
+    "Without this PR",
+    "Projected",
+    "Tag"
+  ];
   const out = [
-    "| Component | Path | Files | Current | Without this PR | Projected | Tag |",
-    "| --- | --- | --- | --- | --- | --- | --- |"
+    `| ${columns.join(" | ")} |`,
+    `| ${columns.map(() => "---").join(" | ")} |`
   ];
   for (const row of rows) {
     const version = row.projected?.version;
-    out.push(
-      `| ${code(row.pkg.component)} | ${code(row.pkg.path)} | ${row.files.length || "\u2014"} | ${row.pkg.current ?? "\u2014"} | ${pendingCell(row, options)} | ${projectedCell(row)} | ${version === void 0 ? "\u2014" : `\`${tagFor(row.pkg, version)}\``} |`
-    );
+    const cells = [
+      code(row.pkg.component),
+      ...showPath ? [code(row.pkg.path)] : [],
+      String(row.files.length || "\u2014"),
+      row.pkg.current ?? "\u2014",
+      pendingCell(row, options),
+      projectedCell(row),
+      version === void 0 ? "\u2014" : `\`${tagFor(row.pkg, version)}\``
+    ];
+    out.push(`| ${cells.join(" | ")} |`);
   }
   return out;
 }

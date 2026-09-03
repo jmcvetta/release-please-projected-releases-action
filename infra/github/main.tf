@@ -15,7 +15,10 @@
 # a release pull request would still open, just with the wrong number on it.
 resource "github_repository" "projected_releases" {
   name        = "release-please-projected-releases-action"
-  description = "GHA Action that comments on a PR with the releases projected to be generated for the PR by release-please manifest mode."
+  # Both modes: the action reads release-please-config.json when there is one
+  # and takes `release-type:` config directly when there is not. This
+  # repository itself releases in the second one.
+  description = "Says on a pull request which release-please tags merging it will cut, in manifest or plain mode."
   visibility  = "public"
 
   # Merge strategy. Do not relax without reading the note above.

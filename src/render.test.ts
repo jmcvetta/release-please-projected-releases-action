@@ -106,6 +106,33 @@ describe("the table", () => {
     expect(out).toContain("| `acme-ui` | `ui` | — | 1.0.0 | — | — | — |");
   });
 
+  // "Which of these components claimed the file" is not a question a
+  // single-package repository has, and every plain-mode one is single-package:
+  // `release-type:` names no packages, so the one it configures gets the
+  // repository root. The column would be `.` repeated once.
+  it("drops Path when every row shares one", () => {
+    const out = body(
+      projection({
+        packages: [API],
+        touched: new Map([["api", ["api/src/x.ts"]]]),
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
+    );
+    expect(out).toContain(
+      "| Component | Files | Current | Without this PR | Projected | Tag |",
+    );
+    expect(out).toContain(
+      "| `acme-api` | 1 | 2.4.1 | — | **2.5.0** | `acme-api@v2.5.0` |",
+    );
+  });
+
+  it("keeps Path when the rows disagree on it", () => {
+    const out = body(projection());
+    expect(out).toContain(
+      "| Component | Path | Files | Current | Without this PR | Projected | Tag |",
+    );
+  });
+
   it("counts the files each component claimed", () => {
     const out = body(
       projection({
