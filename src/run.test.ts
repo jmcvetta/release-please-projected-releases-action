@@ -91,9 +91,9 @@ describe("buildComment", () => {
     expect(out).toContain("| `acme-api` | 1 | 2.4.1 |");
   });
 
-  it("says which directories a pull request outside every component hit", async () => {
+  it("says which directories a pull request outside every package hit", async () => {
     const out = await comment("feat: a thing", { files: ["docs/x.md", "README.md"] });
-    expect(out).toContain("no changed file is under a component path");
+    expect(out).toContain("no changed file is under a package path");
     expect(out).toContain("`docs`");
   });
 

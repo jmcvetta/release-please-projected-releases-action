@@ -8,7 +8,7 @@ on:
   pull_request:
     # `edited` is the load-bearing one: the projection comes from the title,
     # so a title fixed after review has to re-render. `synchronize` covers a
-    # push changing which components the diff touches, and `edited` also fires
+    # push changing which packages the diff touches, and `edited` also fires
     # on a body edit, which can add or void a `Release-As` footer.
     types: [opened, reopened, synchronize, edited]
 

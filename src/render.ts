@@ -1,7 +1,7 @@
 /**
  * render writes the sticky comment body.
  *
- * It is tool output, not a message: one table carrying every component's
+ * It is tool output, not a message: one table carrying every package's
  * numbers and tag — the ones that moved and the ones that did not — and only
  * the notes needed to read it. A line above the table says why nothing
  * releases, which no row can; when something does release, the row says it
@@ -53,11 +53,11 @@ function visibleTitle(options: RenderOptions): boolean {
 }
 
 /**
- * Row is one component's line in the table.
+ * Row is one package's line in the table.
  *
  * Every configured package gets one, whether or not this pull request moves
  * it. A row with no release at all is not noise: it is the evidence that the
- * component was considered and came out unchanged, which is the whole answer
+ * package was considered and came out unchanged, which is the whole answer
  * on the common pull request.
  */
 interface Row {
@@ -279,7 +279,7 @@ function buildRows(projection: Projection): {
 }
 
 /**
- * table is the comment's work product: one row per component, carrying the
+ * table is the comment's work product: one row per package, carrying the
  * numbers rather than a sentence describing the difference between two of
  * them.
  *
@@ -290,7 +290,7 @@ function buildRows(projection: Projection): {
  * is `release-please-projected-releases-action` and its tag is `v0.2.0`.
  *
  * **Path** appears only where the rows do not share one. It answers "which of
- * these components claimed the file", a question a single-package repository
+ * these packages claimed the file", a question a single-package repository
  * does not have: plain mode configures its one package from `release-type:`
  * and gives it the repository root, so the column would be `.` repeated for
  * as many rows as there are, which is one.
@@ -304,7 +304,7 @@ function buildRows(projection: Projection): {
 function table(rows: readonly Row[], options: RenderOptions): string[] {
   const showPath = new Set(rows.map((r) => r.pkg.path)).size > 1;
   const columns = [
-    "Component",
+    "Package",
     ...(showPath ? ["Path"] : []),
     "Files",
     "Current",
@@ -472,7 +472,7 @@ function none(
     const dirs = [
       ...new Set(projection.files.map((f) => f.split("/")[0] ?? f)),
     ].sort();
-    let line = "None — no changed file is under a component path.";
+    let line = "None — no changed file is under a package path.";
     if (dirs.length > 0) {
       line += ` Touched: ${dirs.map((d) => `\`${d}\``).join(", ")}.`;
     }
@@ -487,7 +487,7 @@ function none(
   // preview counts as touched (a path the package excludes, say). Whatever
   // the cause, the title is not a hidden type and must not be called one.
   return visibleTitle(options)
-    ? "None — release-please projects no release for the components touched."
+    ? "None — release-please projects no release for the packages touched."
     : `None — \`${type}\` is a hidden type. Only ${visible} open a release.`;
 }
 
@@ -549,7 +549,7 @@ function warn(
   // told which parts of it this comment could not fill in.
   for (const component of [...new Set(components.unmatched)].sort()) {
     warnings.push(
-      `- release-please releases ${component ? `\`${component}\`` : "a component this comment cannot name"},` +
+      `- release-please releases ${component ? `\`${component}\`` : "a package this comment cannot name"},` +
         " which matches no configured package here. The row's **Current**" +
         " and matched files are unknown, and its tag is this comment's" +
         " reading rather than a configured one.",
@@ -599,7 +599,7 @@ function changelog(moved: readonly MovedRow[]): string {
 
 /**
  * matchedFiles is the working behind the table's file counts: which file
- * pulled in which component, so a surprising count can be traced to its
+ * pulled in which package, so a surprising count can be traced to its
  * cause. Collapsed, because the count is the part that is read.
  */
 function matchedFiles(projection: Projection): string {
@@ -616,14 +616,16 @@ function matchedFiles(projection: Projection): string {
   }
   // Which of the two rules applies depends on whether a package is rooted at
   // the repository. `splitFiles` hands a root package every file, so printing
-  // "a repository-root file matches nothing" there contradicted the very
+  // "a repository-root file belongs to none" there contradicted the very
   // listing above it -- as it did on every comment this action posted on its
   // own repository, which releases in plain mode from `.`.
   const rooted = projection.packages.some((p) => p.path === ROOT_PACKAGE_PATH);
   lines.push(
     rooted
-      ? `Longest path wins; \`${ROOT_PACKAGE_PATH}\` takes every file besides.`
-      : "Longest path wins; a repository-root file matches nothing.",
+      ? "A file belongs to the package with the longest matching path;" +
+        ` \`${ROOT_PACKAGE_PATH}\` takes every file besides.`
+      : "A file belongs to the package with the longest matching path; a" +
+        " repository-root file belongs to none.",
     "",
     "</details>",
   );

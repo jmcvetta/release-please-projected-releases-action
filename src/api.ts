@@ -175,7 +175,7 @@ export class Client {
    *
    * The fallback for a checkout the local diff cannot use — a shallow one has
    * neither the merge base nor the branch. GitHub caps this at 3000 files,
-   * which is a real limit: past it the "components touched" line is
+   * which is a real limit: past it the comment's **Files** counts are
    * incomplete. It is only ever a fallback for that reason.
    */
   async pullRequestFiles(number: number): Promise<string[]> {

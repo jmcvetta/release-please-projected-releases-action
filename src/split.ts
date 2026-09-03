@@ -1,19 +1,19 @@
 /**
- * split attributes changed files to release-please components.
+ * split attributes changed files to release-please packages.
  *
  * This is the one rule still mirrored from release-please rather than taken
  * from it, and it is worth being precise about why that is acceptable here:
  * it decides only what the comment *explains*, never what it predicts.
  * release-please does its own splitting inside `buildPullRequests`, so the
  * versions and tags in the table come from upstream whatever this file says.
- * Getting it wrong costs a wrong "components touched" line, not a wrong
+ * Getting it wrong costs a wrong **Files** count in the table, not a wrong
  * version.
  *
  * The rule, from util/commit-split.ts: package paths are sorted longest
  * first and matched with `file.indexOf(`${p}/`) === 0`, so the deepest
  * package wins and `viewer2/x` is not read as `viewer`. A path with no `/`
  * is skipped outright, which is why a file at the repository root belongs to
- * no component. The special "." root package is excluded from prefix
+ * no package. The special "." root package is excluded from prefix
  * matching there and handed every commit in manifest.ts instead.
  */
 

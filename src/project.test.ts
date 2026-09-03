@@ -266,8 +266,8 @@ describe("Release-As", () => {
 // paths, which raises the question of what a path in some other spelling
 // does. Measured: nothing releases, because manifest.ts looks its split
 // commits up by the raw config key while CommitSplit files them under the
-// normalized one, so the component sees no commits at all. This preview's
-// "no changed file is under a component path" agrees with that, and the
+// normalized one, so the package sees no commits at all. This preview's
+// "no changed file is under a package path" agrees with that, and the
 // spelling is worth catching in the config instead, which validating it
 // against release-please's own schema does not do.
 describe("a package path release-please would normalize", () => {
@@ -345,7 +345,7 @@ describe("which components a pull request reaches", () => {
     });
   });
 
-  it("releases nothing when no file is under a component path", async () => {
+  it("releases nothing when no file is under a package path", async () => {
     expect(versions(await run("feat: a thing", "", ["README.md"]))).toEqual({});
   });
 });

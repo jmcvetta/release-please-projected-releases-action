@@ -61443,7 +61443,7 @@ var Client = class {
    *
    * The fallback for a checkout the local diff cannot use — a shallow one has
    * neither the merge base nor the branch. GitHub caps this at 3000 files,
-   * which is a real limit: past it the "components touched" line is
+   * which is a real limit: past it the comment's **Files** counts are
    * incomplete. It is only ever a fallback for that reason.
    */
   async pullRequestFiles(number) {
@@ -62087,7 +62087,7 @@ function buildRows(projection) {
 function table(rows, options) {
   const showPath = new Set(rows.map((r) => r.pkg.path)).size > 1;
   const columns = [
-    "Component",
+    "Package",
     ...showPath ? ["Path"] : [],
     "Files",
     "Current",
@@ -62167,7 +62167,7 @@ function none(projection, options, touched) {
     const dirs = [
       ...new Set(projection.files.map((f) => f.split("/")[0] ?? f))
     ].sort();
-    let line = "None \u2014 no changed file is under a component path.";
+    let line = "None \u2014 no changed file is under a package path.";
     if (dirs.length > 0) {
       line += ` Touched: ${dirs.map((d) => `\`${d}\``).join(", ")}.`;
     }
@@ -62176,7 +62176,7 @@ function none(projection, options, touched) {
   const types = options.types ?? DEFAULT_TYPES;
   const visible = [...types.visible].sort().map((t) => `\`${t}\``).join(", ");
   const type = titleType(options.title) ?? "";
-  return visibleTitle(options) ? "None \u2014 release-please projects no release for the components touched." : `None \u2014 \`${type}\` is a hidden type. Only ${visible} open a release.`;
+  return visibleTitle(options) ? "None \u2014 release-please projects no release for the packages touched." : `None \u2014 \`${type}\` is a hidden type. Only ${visible} open a release.`;
 }
 function releasePrUrl(component, options) {
   const prs = options.releasePrs;
@@ -62198,7 +62198,7 @@ function warn(projection, options, moved, components) {
   }
   for (const component of [...new Set(components.unmatched)].sort()) {
     warnings.push(
-      `- release-please releases ${component ? `\`${component}\`` : "a component this comment cannot name"}, which matches no configured package here. The row's **Current** and matched files are unknown, and its tag is this comment's reading rather than a configured one.`
+      `- release-please releases ${component ? `\`${component}\`` : "a package this comment cannot name"}, which matches no configured package here. The row's **Current** and matched files are unknown, and its tag is this comment's reading rather than a configured one.`
     );
   }
   for (const component of [...components.named].sort()) {
@@ -62240,7 +62240,7 @@ function matchedFiles(projection) {
   }
   const rooted = projection.packages.some((p) => p.path === ROOT_PACKAGE_PATH);
   lines.push(
-    rooted ? `Longest path wins; \`${ROOT_PACKAGE_PATH}\` takes every file besides.` : "Longest path wins; a repository-root file matches nothing.",
+    rooted ? `A file belongs to the package with the longest matching path; \`${ROOT_PACKAGE_PATH}\` takes every file besides.` : "A file belongs to the package with the longest matching path; a repository-root file belongs to none.",
     "",
     "</details>"
   );

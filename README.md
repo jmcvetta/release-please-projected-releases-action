@@ -18,7 +18,7 @@ if that matters to you.
 ```
 ## Projected releases
 
-| Component | Path | Files | Current | Without this PR | Projected | Tag |
+| Package | Path | Files | Current | Without this PR | Projected | Tag |
 | --- | --- | --- | --- | --- | --- | --- |
 | `acme-api` | `api` | 3 | 2.4.1 | 2.4.2 | **2.5.0** | `acme-api@v2.5.0` |
 | `acme-ui` | `ui` | — | 1.0.0 | — | — | — |
@@ -27,7 +27,7 @@ if that matters to you.
 <details><summary>Matched files</summary> … </details>
 ```
 
-The table is the whole answer, so it is never collapsed and every component
+The table is the whole answer, so it is never collapsed and every package
 gets a row — including the ones that did not move, which is what makes the
 comparison a comparison. **Tag** is the only cell that is not arithmetic on
 the others: `include-component-in-tag` and `tag-separator` decide it, and a
@@ -42,7 +42,7 @@ already says what, how much, and under which tag.
 ## Why it exists
 
 Two invisible things decide what a merge releases, and a reviewer cannot see
-either one side by side with the other: which release-please components the
+either one side by side with the other: which release-please packages the
 changed files belong to, and the Conventional Commit type in the **title**,
 which only becomes a commit subject at squash time. Getting either wrong is
 quiet — a `feat!:` on a change that was not breaking cuts a major version, and
@@ -88,10 +88,9 @@ Four things, all of them presentation:
   is not mergeable under a title gate and misleading without one, so any
   projection from it describes a commit that will never exist;
 - tag spelling, a four-line mirror of `TagName.toString()`;
-- attributing changed files to components (`src/split.ts`), which decides only
+- attributing changed files to packages (`src/split.ts`), which decides only
   what the comment *explains*. release-please does its own splitting, so
-  getting this wrong costs a wrong "components touched" line, never a wrong
-  version.
+  getting this wrong costs a wrong **Files** count, never a wrong version.
 
 ## What it assumes
 

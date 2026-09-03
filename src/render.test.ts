@@ -63,18 +63,18 @@ describe("the verdict line", () => {
         projected: [{ component: "acme-api", version: "2.5.0", notes: "- x" }],
       }),
     );
-    expect(out).toContain("## Projected releases\n\n| Component |");
+    expect(out).toContain("## Projected releases\n\n| Package |");
   });
 
   // Why nothing releases is nowhere in a row, so it gets the line.
   it("says why when nothing releases, above the table", () => {
     const out = body(projection(), { title: "docs: a thing" });
-    expect(out.indexOf("None —")).toBeLessThan(out.indexOf("| Component |"));
+    expect(out.indexOf("None —")).toBeLessThan(out.indexOf("| Package |"));
   });
 });
 
 describe("the table", () => {
-  it("carries the versions of a component this pull request moves", () => {
+  it("carries the versions of a package this pull request moves", () => {
     const out = body(
       projection({
         projected: [{ component: "acme-api", version: "2.5.0", notes: "- x" }],
@@ -86,18 +86,18 @@ describe("the table", () => {
     );
   });
 
-  // It is the comment's work product: which component each changed file was
-  // attributed to and what that component's version does. Behind a
+  // It is the comment's work product: which package each changed file was
+  // attributed to and what that package's version does. Behind a
   // `<details>` it was the only content of substance on the common pull
   // request, and hidden.
   it("is not collapsed", () => {
     const out = body(projection());
-    expect(out.indexOf("| Component |")).toBeLessThan(out.indexOf("<details>"));
+    expect(out.indexOf("| Package |")).toBeLessThan(out.indexOf("<details>"));
   });
 
-  // A component that releases nothing is not noise: its row is the evidence
+  // A package that releases nothing is not noise: its row is the evidence
   // that it was considered and came out unchanged.
-  it("keeps a row for every configured component", () => {
+  it("keeps a row for every configured package", () => {
     const out = body(
       projection({
         projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
@@ -106,7 +106,7 @@ describe("the table", () => {
     expect(out).toContain("| `acme-ui` | `ui` | — | 1.0.0 | — | — | — |");
   });
 
-  // "Which of these components claimed the file" is not a question a
+  // "Which of these packages claimed the file" is not a question a
   // single-package repository has, and every plain-mode one is single-package:
   // `release-type:` names no packages, so the one it configures gets the
   // repository root. The column would be `.` repeated once.
@@ -119,7 +119,7 @@ describe("the table", () => {
       }),
     );
     expect(out).toContain(
-      "| Component | Files | Current | Without this PR | Projected | Tag |",
+      "| Package | Files | Current | Without this PR | Projected | Tag |",
     );
     expect(out).toContain(
       "| `acme-api` | 1 | 2.4.1 | — | **2.5.0** | `acme-api@v2.5.0` |",
@@ -129,11 +129,11 @@ describe("the table", () => {
   it("keeps Path when the rows disagree on it", () => {
     const out = body(projection());
     expect(out).toContain(
-      "| Component | Path | Files | Current | Without this PR | Projected | Tag |",
+      "| Package | Path | Files | Current | Without this PR | Projected | Tag |",
     );
   });
 
-  it("counts the files each component claimed", () => {
+  it("counts the files each package claimed", () => {
     const out = body(
       projection({
         touched: new Map([["api", ["api/a.ts", "api/b.ts", "api/c.ts"]]]),
@@ -225,33 +225,33 @@ describe("a release this pull request does not cause", () => {
 });
 
 describe("saying that nothing releases", () => {
-  it("blames the files when no component is touched", () => {
+  it("blames the files when no package is touched", () => {
     const out = body(
       projection({
         touched: new Map(),
         files: ["job-descriptions/2026-09-r1/01-x.md", "pipeline.json"],
       }),
     );
-    expect(out).toContain("no changed file is under a component path");
+    expect(out).toContain("no changed file is under a package path");
     expect(out).toContain("`job-descriptions`");
     expect(out).toContain("`pipeline.json`");
     expect(out).toContain("| `acme-api` | `api` | — | 2.4.1 | — | — | — |");
   });
 
-  it("blames the type when a component is touched but nothing releases", () => {
+  it("blames the type when a package is touched but nothing releases", () => {
     const out = body(projection(), { title: "docs: a thing" });
     expect(out).toContain("None — `docs` is a hidden type.");
     expect(out).toContain("Only `feat`");
-    // Which component it touched is a column now, not a sentence.
+    // Which package it touched is a column now, not a sentence.
     expect(out).toContain("| `acme-api` | `api` | 1 |");
-    expect(out).not.toContain("Components touched:");
+    expect(out).not.toContain("Packages touched:");
   });
 
-  // Another component's standing release pull request is not this one's
+  // Another package's standing release pull request is not this one's
   // business, and counting it made the verdict contradict the warning three
-  // lines below it. The table carries that component's numbers regardless,
+  // lines below it. The table carries that package's numbers regardless,
   // so scoping the sentence hides nothing.
-  it("scopes the verdict to the components touched", () => {
+  it("scopes the verdict to the packages touched", () => {
     const out = body(
       projection({
         projected: [{ component: "acme-ui", version: "1.1.0", notes: "" }],
@@ -286,7 +286,7 @@ describe("Release-As", () => {
       }),
     );
     expect(out).toContain("- `Release-As: 9.9.9` forces the version.");
-    expect(out.indexOf("| Component |")).toBeLessThan(
+    expect(out.indexOf("| Package |")).toBeLessThan(
       out.indexOf("forces the version"),
     );
   });
@@ -324,7 +324,7 @@ describe("a malformed title", () => {
     });
     expect(out).toContain("None — malformed PR title.");
     expect(out).toContain("> Feat: a thing");
-    expect(out).not.toContain("| Component |");
+    expect(out).not.toContain("| Package |");
   });
 });
 
@@ -556,7 +556,7 @@ describe("a release whose component matches no configured package", () => {
       ] }),
     );
     expect(out).toContain("| **1.0.0** | `v1.0.0` |");
-    expect(out).toContain("a component this comment cannot name");
+    expect(out).toContain("a package this comment cannot name");
   });
 });
 
@@ -587,9 +587,10 @@ describe("the rule printed under the matched-files listing", () => {
     expect(out).toContain("- …and 4 more");
   });
 
-  it("says a root file matches nothing when no package is rooted", () => {
+  it("says a root file belongs to no package when none is rooted", () => {
     expect(body(projection())).toContain(
-      "Longest path wins; a repository-root file matches nothing.",
+      "A file belongs to the package with the longest matching path; a" +
+        " repository-root file belongs to none.",
     );
   });
 
@@ -602,6 +603,6 @@ describe("the rule printed under the matched-files listing", () => {
       }),
     );
     expect(out).toContain("`.` takes every file besides.");
-    expect(out).not.toContain("matches nothing");
+    expect(out).not.toContain("belongs to none");
   });
 });
