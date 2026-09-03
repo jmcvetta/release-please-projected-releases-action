@@ -25,10 +25,13 @@ Install the version in `.opentofu-version`, which is also what CI reads. A
 version manager (`tenv`, `asdf`, `mise`) picks the file up from this directory
 on its own; otherwise match it by hand.
 
-Once the resources below are imported and applied, a clean checkout should plan
-as **`No changes.`** Anything else means either someone changed a setting in
-the web UI, or a change here has not been applied yet — the plan output tells
-you which.
+A clean checkout plans as **`No changes.`** Anything else means either someone
+changed a setting in the web UI, or a change here has not been applied yet —
+the plan output tells you which.
+
+`imports.tf` adopts the resources that predate this stack, so an apply against
+empty state rebuilds it rather than trying to create a repository that is
+already there. Only the ruleset is created outright.
 
 ### The provider lock has to be what init produces
 
@@ -70,49 +73,6 @@ installed.
 
 This is not a substitute for reading `tofu plan` before an apply. Validation
 knows the configuration is well-formed; only the plan knows what it will do.
-
-## First run: import what exists, create what does not
-
-Everything here except the ruleset already existed when the configuration was
-written, so those resources are imported rather than created. That matters most
-for the repository itself: letting Tofu create it fresh is not something it can
-do to a repository that is already there, and the plan would say so in the most
-alarming way available.
-
-```sh
-tofu import github_repository.projected_releases release-please-projected-releases-action
-tofu import github_repository_vulnerability_alerts.projected_releases release-please-projected-releases-action
-tofu import github_repository_dependabot_security_updates.projected_releases release-please-projected-releases-action
-tofu import github_workflow_repository_permissions.projected_releases release-please-projected-releases-action
-```
-
-`github_repository_ruleset.master` is deliberately absent from that list: no
-ruleset exists on this repository yet, so it is created by the apply. Creating
-one is the safe direction — there is nothing to destroy first, and so no window
-in which `master` is less protected than it was.
-
-Then read the plan. Two changes are expected on the first apply and both are
-the point of the exercise:
-
-- **the ruleset is created**, which is what finally puts a mechanism behind
-  CLAUDE.md's "never push to `master`";
-- **`can_approve_pull_request_reviews` flips to true**, which is what lets the
-  release job open its release pull request at all.
-
-A third may show up depending on how the repository was left: if
-`default_workflow_permissions` currently reads `write`, the apply narrows it to
-`read`. Every workflow here declares the scopes its own jobs need, so nothing
-loses a permission it was using.
-
-If state is ever lost, rebuild it by importing rather than applying — including
-the ruleset, which by then does exist:
-
-```sh
-tofu import github_repository_ruleset.master release-please-projected-releases-action:<ruleset_id>
-```
-
-Find the id with `gh api repos/jmcvetta/release-please-projected-releases-action/rulesets`.
-Then confirm `tofu plan` reports `No changes.` before applying anything.
 
 ## Where state lives, and why it is committed
 
