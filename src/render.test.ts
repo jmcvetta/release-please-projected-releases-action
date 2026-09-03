@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolveTypes } from "./conventional.js";
 import type { PackageConfig, Projection } from "./project.js";
 import { tagFor } from "./project.js";
-import { bumpLevel, footer, render } from "./render.js";
+import { footer, render } from "./render.js";
 
 const API: PackageConfig = {
   path: "api",
@@ -53,25 +53,18 @@ describe("tagFor", () => {
   });
 });
 
-describe("bumpLevel", () => {
-  it.each([
-    ["2.4.1", "3.0.0", "major"],
-    ["2.4.1", "2.5.0", "minor"],
-    ["2.4.1", "2.4.2", "patch"],
-    ["2.4.1", "2.4.1", "no"],
-  ])("reads %s to %s as a %s bump", (from, to, level) => {
-    expect(bumpLevel(from, to)).toBe(level);
-  });
-});
-
 describe("the verdict line", () => {
-  it("names the tags a merge cuts, and the bump", () => {
+  // The tags, and nothing else. Naming the bump size beside them restated
+  // Current and Projected, two columns of the very table the reader is being
+  // pointed at.
+  it("is the tags a merge cuts", () => {
     const out = body(
       projection({
         projected: [{ component: "acme-api", version: "2.5.0", notes: "- x" }],
       }),
     );
-    expect(out).toContain("Cuts `acme-api@v2.5.0` — minor bump.");
+    expect(out).toContain("\n`acme-api@v2.5.0`\n");
+    expect(out).not.toContain("bump");
   });
 
   it("names every tag when a merge cuts several", () => {
@@ -83,13 +76,12 @@ describe("the verdict line", () => {
         ],
       }),
     );
-    expect(out).toContain("Cuts `acme-api@v2.5.0`, `acme-ui@v2.0.0`");
-    expect(out).toContain("minor / major bump.");
+    expect(out).toContain("\n`acme-api@v2.5.0`, `acme-ui@v2.0.0`\n");
   });
 
   // The comment is read for its answer; the evidence is what follows it.
   it("comes before the table", () => {
-    const out = body(projection());
+    const out = body(projection(), { title: "docs: a thing" });
     expect(out.indexOf("None —")).toBeLessThan(out.indexOf("| Component |"));
   });
 });
@@ -185,7 +177,7 @@ describe("a release this pull request does not cause", () => {
   // "Current: —" before any release existed. The column heading makes only
   // the claim the second pass actually establishes.
   it("does not claim a release is pending when none was found", () => {
-    const out = body(absorbed, { base: "master" });
+    const out = body(absorbed);
     expect(out).toContain("| Without this PR |");
     expect(out).not.toContain("already pending");
   });
@@ -197,28 +189,22 @@ describe("a release this pull request does not cause", () => {
     expect(out).toContain("| [2.5.0](https://x/9) | 2.5.0 |");
   });
 
-  // The feature does ship, in the notes of the version already coming.
+  // The feature does ship, in the notes of the version already coming. Which
+  // release that is, and that it is coming at all, is the row above.
   it("credits a visible type with the changelog line it adds", () => {
-    const out = body(absorbed, { title: "feat: another feature", base: "main" });
-    expect(out).toContain(
-      "No version change — `feat` adds a changelog line to a release" +
-        " `main` already makes.",
-    );
-  });
-
-  it("falls back to a generic phrase when no base branch was given", () => {
-    expect(body(absorbed)).toContain("the target branch already makes.");
+    const out = body(absorbed, { title: "feat: another feature" });
+    expect(out).toContain("No version change — `feat` adds only a changelog line.");
   });
 
   // Three sentences where one will do: the old comment stated the verdict,
   // then repeated it as a per-component note, then again as a warning, with
-  // the branch name spelled out in two of them.
+  // the 43-character branch name spelled out in two of them.
   it("tells a hidden type it contributes nothing, once", () => {
-    const out = body(absorbed, { title: "docs: a note", base: "master" });
+    const out = body(absorbed, { title: "docs: a note" });
     expect(out).toContain("No version change — `docs` is a hidden type.");
     expect(out).not.toContain("adds no changelog line");
     expect(out).not.toContain("stays at");
-    expect(out.match(/`master`/g)).toBeNull();
+    expect(out).not.toContain("already");
   });
 });
 
@@ -278,7 +264,9 @@ describe("Release-As", () => {
         projected: [{ component: "acme-api", version: "9.9.9", notes: "" }],
       }),
     );
-    expect(out).toContain("`Release-As: 9.9.9` forces the version.");
+    expect(out).toContain(
+      "`acme-api@v9.9.9` — `Release-As: 9.9.9` forces the version.",
+    );
   });
 
   it("warns when release-please returned a different version", () => {
@@ -464,7 +452,7 @@ describe("two packages under one component name", () => {
 
   it("gives each release a package of its own", () => {
     const out = body(both);
-    expect(out).toContain("Cuts `v2.5.0`, `v1.1.0`");
+    expect(out).toContain("\n`v2.5.0`, `v1.1.0`\n");
     expect(out).toContain("| `acme-api` | `api` | 1 | 2.4.1 | — | **2.5.0** |");
     expect(out).toContain("| `acme-ui` | `ui` | 1 | 1.0.0 | — | **1.1.0** |");
   });
@@ -504,7 +492,7 @@ describe("a release whose component matches no configured package", () => {
 
   it("keeps the row rather than reporting none", () => {
     const out = body(stray);
-    expect(out).toContain("Cuts `ghost@v3.1.0`");
+    expect(out).toContain("\n`ghost@v3.1.0`\n");
     expect(out).toContain("| `ghost` | — | — | — | — | **3.1.0** |");
     expect(out).not.toContain("None —");
   });
@@ -524,7 +512,7 @@ describe("a release whose component matches no configured package", () => {
         ],
       }),
     );
-    expect(out).toContain("Cuts `acme-api@v2.5.0`, `ghost@v3.1.0`");
+    expect(out).toContain("\n`acme-api@v2.5.0`, `ghost@v3.1.0`\n");
     expect(out).toContain("| `acme-api` | `api` | 1 | 2.4.1 |");
     expect(out).toContain("| `ghost` | — | — | — |");
   });
@@ -535,7 +523,7 @@ describe("a release whose component matches no configured package", () => {
         { component: "", version: "1.0.0", notes: "" },
       ] }),
     );
-    expect(out).toContain("Cuts `v1.0.0`");
+    expect(out).toContain("\n`v1.0.0`\n");
     expect(out).toContain("a component this comment cannot name");
   });
 });

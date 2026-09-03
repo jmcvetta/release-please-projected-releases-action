@@ -18,7 +18,7 @@ if that matters to you.
 ```
 ## Projected releases
 
-Cuts `acme-api@v2.5.0` — minor bump.
+`acme-api@v2.5.0`
 
 | Component | Path | Files | Current | Without this PR | Projected |
 | --- | --- | --- | --- | --- | --- |
@@ -29,10 +29,10 @@ Cuts `acme-api@v2.5.0` — minor bump.
 <details><summary>Matched files</summary> … </details>
 ```
 
-The verdict is one line, the same shape every time: which tags the merge
-cuts, or that it moves no version and why. The table carries every
-component's numbers — including the ones that did not move — so the reader
-compares two columns rather than reading a sentence describing them.
+The first line is the answer and nothing else: the tags the merge cuts, or
+`None` with the one clause saying why. The table carries every component's
+numbers — including the ones that did not move — so the reader compares two
+columns rather than reading a sentence describing them.
 
 ## Why it exists
 

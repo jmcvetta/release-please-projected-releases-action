@@ -1,11 +1,13 @@
 /**
  * render writes the sticky comment body.
  *
- * It is tool output, not a message: a one-line verdict, then one table
- * carrying every component's numbers — the ones that moved and the ones that
- * did not — and then only the notes needed to read it. Most pull requests in
- * a repository like this one release nothing at all, so "nothing will be
- * released" is stated as an answer rather than left as silence.
+ * It is tool output, not a message: a one-line verdict — the tags the merge
+ * cuts, or `None` and why — then one table carrying every component's numbers,
+ * the ones that moved and the ones that did not, and then only the notes
+ * needed to read it. Nothing in the line restates a column beside it. Most
+ * pull requests in a repository like this one release nothing at all, so
+ * "nothing will be released" is stated as an answer rather than left as
+ * silence.
  *
  * The table is the work product and is never collapsed. What is collapsed is
  * genuinely secondary: the changelog preview, and the per-file listing behind
@@ -30,9 +32,6 @@ export interface RenderOptions {
   headSha?: string;
   /** runUrl is this workflow run, linked from the footer. */
   runUrl?: string;
-  /** base is the branch the pull request targets, named when explaining what
-   * that branch already releases on its own. */
-  base?: string;
   /** types is the resolved changelog type list, which decides what "visible"
    * means for this repository. Defaults to the conventionalcommits preset. */
   types?: TypeSet;
@@ -74,21 +73,6 @@ interface Row {
 /** MovedRow is a row whose version this pull request changes, so it has a
  * projected release and a tag to name. */
 type MovedRow = Row & { projected: Release };
-
-/**
- * bumpLevel names the size of a bump by comparing the two versions, rather
- * than by re-deriving it from the commit type. What release-please did is
- * more informative than what it should have done.
- */
-export function bumpLevel(from: string, to: string): string {
-  const a = from.split(".").map(Number);
-  const b = to.split(".").map(Number);
-  if (a.length !== 3 || b.length !== 3) return "version";
-  if (b[0] !== a[0]) return "major";
-  if (b[1] !== a[1]) return "minor";
-  if (b[2] !== a[2]) return "patch";
-  return "no";
-}
 
 /**
  * footer stamps the comment with what it was rendered from.
@@ -343,10 +327,11 @@ function code(value: string): string {
  * verdict is the single line answering the question the comment exists for,
  * before any of the evidence.
  *
- * Three answers, one line each: which tags the merge cuts, that it moves no
- * version and why, or that nothing releases at all and why. The reasons the
- * reader could read off the table — that a version is the same in two columns
- * — are not repeated here.
+ * When something releases it is the tags, and nothing else: naming the bump
+ * size beside them restated two of the table's own columns, in a comment whose
+ * whole point is that the reader compares those columns himself. Otherwise it
+ * is "None", or "No version change" for a release this pull request rides
+ * along on, with the one clause the table cannot carry — why.
  */
 function verdict(
   projection: Projection,
@@ -359,7 +344,8 @@ function verdict(
     const tags = moved
       .map((r) => `\`${tagFor(r.pkg, r.projected.version)}\``)
       .join(", ");
-    return `Cuts ${tags} — ${basis(moved, projection)}`;
+    const asked = forced(moved, projection);
+    return asked ? `${tags} — \`Release-As: ${asked}\` forces the version.` : tags;
   }
 
   const type = titleType(options.title) ?? "";
@@ -369,8 +355,7 @@ function verdict(
     // Saying only that the version does not move reads as contributing
     // nothing, which for a `feat:` is wrong.
     return visibleTitle(options)
-      ? `No version change — \`${type}\` adds a changelog line to a release` +
-          ` ${branch(options)} already makes.`
+      ? `No version change — \`${type}\` adds only a changelog line.`
       : `No version change — \`${type}\` is a hidden type.`;
   }
   return none(projection, options, touchedPackages);
@@ -483,8 +468,7 @@ function none(
   // preview counts as touched (a path the package excludes, say). Whatever
   // the cause, the title is not a hidden type and must not be called one.
   return visibleTitle(options)
-    ? `None — release-please projects no release for the components this` +
-        ` pull request touches, and none has one pending.`
+    ? "None — release-please projects no release for the components touched."
     : `None — \`${type}\` is a hidden type. Only ${visible} open a release.`;
 }
 
@@ -524,26 +508,20 @@ function pendingCell(row: Row, options: RenderOptions): string {
   return url ? `[${row.pending.version}](${url})` : row.pending.version;
 }
 
-/** basis is the clause stating what produced the versions in the table. */
-function basis(moved: readonly MovedRow[], projection: Projection): string {
+/**
+ * forced reports a `Release-As:` note that produced one of these versions.
+ *
+ * The one thing about a bump that the table cannot show: every other reason a
+ * version came out as it did is the commit type, which is in the title just
+ * above.
+ */
+function forced(
+  moved: readonly MovedRow[],
+  projection: Projection,
+): string | undefined {
   const asked = projection.releaseAs;
-  if (asked && !projection.ignoredReleaseAs) {
-    if (moved.some((r) => r.projected.version === asked)) {
-      return `\`Release-As: ${asked}\` forces the version.`;
-    }
-  }
-  const levels = [
-    ...new Set(
-      moved.map((r) => bumpLevel(r.pkg.current ?? "0.0.0", r.projected.version)),
-    ),
-  ];
-  return `${levels.join(" / ")} bump.`;
-}
-
-/** branch names the target branch for prose, falling back to a generic
- * phrase when the caller did not say which it is. */
-function branch(options: RenderOptions): string {
-  return options.base ? `\`${options.base}\`` : "the target branch";
+  if (!asked || projection.ignoredReleaseAs) return undefined;
+  return moved.some((r) => r.projected.version === asked) ? asked : undefined;
 }
 
 /** warn is the terse list of things that will surprise someone. */

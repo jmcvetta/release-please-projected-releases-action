@@ -50836,8 +50836,8 @@ ${releaseList}
         dateFormat: config["date-format"]
       };
     }
-    async function parseConfig(github, configFile, branch2, onlyPath, releaseAs) {
-      const config = await fetchManifestConfig(github, configFile, branch2);
+    async function parseConfig(github, configFile, branch, onlyPath, releaseAs) {
+      const config = await fetchManifestConfig(github, configFile, branch);
       const defaultConfig = extractReleaserConfig(config);
       const repositoryConfig = {};
       for (const path in config.packages) {
@@ -50872,9 +50872,9 @@ ${releaseList}
       };
       return { config: repositoryConfig, options: manifestOptions };
     }
-    async function fetchManifestConfig(github, configFile, branch2) {
+    async function fetchManifestConfig(github, configFile, branch) {
       try {
-        return await github.getFileJson(configFile, branch2);
+        return await github.getFileJson(configFile, branch);
       } catch (e) {
         if (e instanceof errors_1.FileNotFoundError) {
           throw new errors_1.ConfigurationError(`Missing required manifest config: ${configFile}`, "base", `${github.repository.owner}/${github.repository.repo}`);
@@ -50885,17 +50885,17 @@ ${e.message}`, "base", `${github.repository.owner}/${github.repository.repo}`);
         throw e;
       }
     }
-    async function parseReleasedVersions(github, manifestFile, branch2) {
-      const manifestJson = await fetchReleasedVersions(github, manifestFile, branch2);
+    async function parseReleasedVersions(github, manifestFile, branch) {
+      const manifestJson = await fetchReleasedVersions(github, manifestFile, branch);
       const releasedVersions = {};
       for (const path in manifestJson) {
         releasedVersions[path] = version_1.Version.parse(manifestJson[path]);
       }
       return releasedVersions;
     }
-    async function fetchReleasedVersions(github, manifestFile, branch2) {
+    async function fetchReleasedVersions(github, manifestFile, branch) {
       try {
-        return await github.getFileJson(manifestFile, branch2);
+        return await github.getFileJson(manifestFile, branch);
       } catch (e) {
         if (e instanceof errors_1.FileNotFoundError) {
           throw new errors_1.ConfigurationError(`Missing required manifest versions: ${manifestFile}`, "base", `${github.repository.owner}/${github.repository.repo}`);
@@ -51578,11 +51578,11 @@ var require_branch = __commonJS({
       return REF_PREFIX + branchName;
     }
     exports2.createRef = createRef;
-    async function getBranchHead(octokit, origin, branch3) {
+    async function getBranchHead(octokit, origin, branch2) {
       const branchData = (await octokit.repos.getBranch({
         owner: origin.owner,
         repo: origin.repo,
-        branch: branch3
+        branch: branch2
       })).data;
       logger_1.logger.info(`Successfully found branch HEAD sha "${branchData.commit.sha}".`);
       return branchData.commit.sha;
@@ -51618,7 +51618,7 @@ var require_branch = __commonJS({
       }
     }
     exports2.createBranch = createBranch;
-    async function branch2(octokit, origin, upstream, name2, baseBranch = DEFAULT_PRIMARY_BRANCH) {
+    async function branch(octokit, origin, upstream, name2, baseBranch = DEFAULT_PRIMARY_BRANCH) {
       try {
         const baseSha = await getBranchHead(octokit, upstream, baseBranch);
         const duplicate = await existsBranchWithName(octokit, origin, name2);
@@ -51629,7 +51629,7 @@ var require_branch = __commonJS({
         throw err;
       }
     }
-    exports2.branch = branch2;
+    exports2.branch = branch;
   }
 });
 
@@ -59752,8 +59752,8 @@ var require_git_file_utils = __commonJS({
        * @param {string} branch Branch to fetch the file from
        * @returns {GitHubFileContents} The file contents
        */
-      async getFileContents(path, branch2) {
-        const fileCache = this.getBranchFileCache(branch2);
+      async getFileContents(path, branch) {
+        const fileCache = this.getBranchFileCache(branch);
         return await fileCache.getFileContents(path);
       }
       /**
@@ -59766,8 +59766,8 @@ var require_git_file_utils = __commonJS({
        *   the path prefix.
        * @returns {string[]} Paths to the files (relative to path prefix)
        */
-      async findFilesByFilename(filename, branch2, pathPrefix) {
-        const fileCache = this.getBranchFileCache(branch2);
+      async findFilesByFilename(filename, branch, pathPrefix) {
+        const fileCache = this.getBranchFileCache(branch);
         return await fileCache.findFilesByFilename(filename, pathPrefix);
       }
       /**
@@ -59781,8 +59781,8 @@ var require_git_file_utils = __commonJS({
        *   the path prefix.
        * @returns {string[]} Paths to the files (relative to path prefix)
        */
-      async findFilesByExtension(extension, branch2, pathPrefix) {
-        const fileCache = this.getBranchFileCache(branch2);
+      async findFilesByExtension(extension, branch, pathPrefix) {
+        const fileCache = this.getBranchFileCache(branch);
         return await fileCache.findFilesByExtension(extension, pathPrefix);
       }
       /**
@@ -59795,8 +59795,8 @@ var require_git_file_utils = __commonJS({
        *   the path prefix.
        * @returns {string[]} Paths to the files (relative to path prefix)
        */
-      async findFilesByGlob(glob, branch2, pathPrefix) {
-        const fileCache = this.getBranchFileCache(branch2);
+      async findFilesByGlob(glob, branch, pathPrefix) {
+        const fileCache = this.getBranchFileCache(branch);
         return await fileCache.findFilesByGlob(glob, pathPrefix);
       }
       /**
@@ -59804,11 +59804,11 @@ var require_git_file_utils = __commonJS({
        * @param {string} branch The branch the cache is for
        * @returns {BranchFileCache} The branch file cache
        */
-      getBranchFileCache(branch2) {
-        let fileCache = this.cache.get(branch2);
+      getBranchFileCache(branch) {
+        let fileCache = this.cache.get(branch);
         if (!fileCache) {
-          fileCache = new BranchFileCache(this.octokit, this.repository, branch2);
-          this.cache.set(branch2, fileCache);
+          fileCache = new BranchFileCache(this.octokit, this.repository, branch);
+          this.cache.set(branch, fileCache);
         }
         return fileCache;
       }
@@ -59822,10 +59822,10 @@ var require_git_file_utils = __commonJS({
        * @param {Repository} repository The repository we are fetching data for
        * @param {string} branch The branch we are fetching data from
        */
-      constructor(octokit, repository, branch2) {
+      constructor(octokit, repository, branch) {
         this.octokit = octokit;
         this.repository = repository;
-        this.branch = branch2;
+        this.branch = branch;
         this.cache = /* @__PURE__ */ new Map();
         this.treeCache = /* @__PURE__ */ new Map();
       }
@@ -60496,10 +60496,10 @@ var require_github2 = __commonJS({
        * @throws {FileNotFoundError} if the file cannot be found
        * @throws {GitHubAPIError} on other API errors
        */
-      async getFileContentsOnBranch(path, branch2) {
-        this.logger.debug(`Fetching ${path} from branch ${branch2}`);
+      async getFileContentsOnBranch(path, branch) {
+        this.logger.debug(`Fetching ${path} from branch ${branch}`);
         try {
-          return await this.fileCache.getFileContents(path, branch2);
+          return await this.fileCache.getFileContents(path, branch);
         } catch (e) {
           if (e instanceof git_file_utils_1.FileNotFoundError) {
             throw new errors_1.FileNotFoundError(path);
@@ -60507,8 +60507,8 @@ var require_github2 = __commonJS({
           throw e;
         }
       }
-      async getFileJson(path, branch2) {
-        const content = await this.getFileContentsOnBranch(path, branch2);
+      async getFileJson(path, branch) {
+        const content = await this.getFileContentsOnBranch(path, branch);
         return JSON.parse(content.parsedContent);
       }
       /**
@@ -61640,16 +61640,16 @@ function isMalformed(title, types = DEFAULT_TYPES) {
 function escape(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-function releaseBranch(branch2, prefix = DEFAULT_TYPES.releaseBranchPrefix) {
+function releaseBranch(branch, prefix = DEFAULT_TYPES.releaseBranchPrefix) {
   const pattern = new RegExp(
     `^${escape(prefix)}branches--(?<base>[^-]|.+?)(?:--components--(?<component>.+))?$`
   );
-  const groups = pattern.exec(branch2.trim())?.groups;
+  const groups = pattern.exec(branch.trim())?.groups;
   if (!groups) return void 0;
   return { base: groups["base"] ?? "", component: groups["component"] ?? "" };
 }
-function componentOfBranch(branch2, prefix = DEFAULT_TYPES.releaseBranchPrefix) {
-  return releaseBranch(branch2, prefix)?.component;
+function componentOfBranch(branch, prefix = DEFAULT_TYPES.releaseBranchPrefix) {
+  return releaseBranch(branch, prefix)?.component;
 }
 
 // src/split.ts
@@ -61717,16 +61717,16 @@ ${commit.body.trim()}` : commit.title;
   };
   const paths = Object.keys(overrides);
   if (paths.length > 0) {
-    view.getFileJson = async function(path, branch2) {
+    view.getFileJson = async function(path, branch) {
       if (Object.hasOwn(overrides, path)) return overrides[path];
-      return base.getFileJson(path, branch2);
+      return base.getFileJson(path, branch);
     };
   }
   if (readHeadFile) {
-    view.getFileContentsOnBranch = async function(path, branch2) {
+    view.getFileContentsOnBranch = async function(path, branch) {
       const content = readHeadFile(path);
       if (content === void 0) {
-        return base.getFileContentsOnBranch(path, branch2);
+        return base.getFileContentsOnBranch(path, branch);
       }
       return {
         sha: "",
@@ -61945,10 +61945,10 @@ var import_release_please3 = __toESM(require_src2(), 1);
 function indexReleasePrs(prs, prefix = DEFAULT_TYPES.releaseBranchPrefix, base) {
   const index = /* @__PURE__ */ new Map();
   for (const pr of prs) {
-    const branch2 = releaseBranch(pr.headRefName, prefix);
-    if (!branch2 || !pr.url.trim()) continue;
-    if (base !== void 0 && branch2.base !== base) continue;
-    index.set(branch2.component, pr.url.trim());
+    const branch = releaseBranch(pr.headRefName, prefix);
+    if (!branch || !pr.url.trim()) continue;
+    if (base !== void 0 && branch.base !== base) continue;
+    index.set(branch.component, pr.url.trim());
   }
   return index;
 }
@@ -61970,15 +61970,6 @@ import { resolve } from "node:path";
 function visibleTitle(options) {
   const types = options.types ?? DEFAULT_TYPES;
   return types.visible.has(titleType(options.title) ?? "");
-}
-function bumpLevel(from, to) {
-  const a = from.split(".").map(Number);
-  const b = to.split(".").map(Number);
-  if (a.length !== 3 || b.length !== 3) return "version";
-  if (b[0] !== a[0]) return "major";
-  if (b[1] !== a[1]) return "minor";
-  if (b[2] !== a[2]) return "patch";
-  return "no";
 }
 function footer(options) {
   const parts = [];
@@ -62116,11 +62107,12 @@ function code(value) {
 function verdict(projection, options, moved, unmoved, touchedPackages) {
   if (moved.length > 0) {
     const tags = moved.map((r) => `\`${tagFor(r.pkg, r.projected.version)}\``).join(", ");
-    return `Cuts ${tags} \u2014 ${basis(moved, projection)}`;
+    const asked = forced(moved, projection);
+    return asked ? `${tags} \u2014 \`Release-As: ${asked}\` forces the version.` : tags;
   }
   const type = titleType(options.title) ?? "";
   if (unmoved.length > 0) {
-    return visibleTitle(options) ? `No version change \u2014 \`${type}\` adds a changelog line to a release ${branch(options)} already makes.` : `No version change \u2014 \`${type}\` is a hidden type.`;
+    return visibleTitle(options) ? `No version change \u2014 \`${type}\` adds only a changelog line.` : `No version change \u2014 \`${type}\` is a hidden type.`;
   }
   return none(projection, options, touchedPackages);
 }
@@ -62170,7 +62162,7 @@ function none(projection, options, touched) {
   const types = options.types ?? DEFAULT_TYPES;
   const visible = [...types.visible].sort().map((t) => `\`${t}\``).join(", ");
   const type = titleType(options.title) ?? "";
-  return visibleTitle(options) ? `None \u2014 release-please projects no release for the components this pull request touches, and none has one pending.` : `None \u2014 \`${type}\` is a hidden type. Only ${visible} open a release.`;
+  return visibleTitle(options) ? "None \u2014 release-please projects no release for the components touched." : `None \u2014 \`${type}\` is a hidden type. Only ${visible} open a release.`;
 }
 function releasePrUrl(component, options) {
   const prs = options.releasePrs;
@@ -62184,22 +62176,10 @@ function pendingCell(row, options) {
   const url = releasePrUrl(row.pkg.component, options);
   return url ? `[${row.pending.version}](${url})` : row.pending.version;
 }
-function basis(moved, projection) {
+function forced(moved, projection) {
   const asked = projection.releaseAs;
-  if (asked && !projection.ignoredReleaseAs) {
-    if (moved.some((r) => r.projected.version === asked)) {
-      return `\`Release-As: ${asked}\` forces the version.`;
-    }
-  }
-  const levels = [
-    ...new Set(
-      moved.map((r) => bumpLevel(r.pkg.current ?? "0.0.0", r.projected.version))
-    )
-  ];
-  return `${levels.join(" / ")} bump.`;
-}
-function branch(options) {
-  return options.base ? `\`${options.base}\`` : "the target branch";
+  if (!asked || projection.ignoredReleaseAs) return void 0;
+  return moved.some((r) => r.projected.version === asked) ? asked : void 0;
 }
 function warn(projection, options, components) {
   const warnings = [...options.advisories ?? []];
@@ -62305,7 +62285,6 @@ async function buildComment(options) {
     ...options.releasePrs ? { releasePrs: options.releasePrs } : {},
     ...options.headSha ? { headSha: options.headSha } : {},
     ...options.runUrl ? { runUrl: options.runUrl } : {},
-    ...options.base ? { base: options.base } : {},
     ...options.advisories ? { advisories: options.advisories } : {},
     ...options.now ? { now: options.now } : {}
   });

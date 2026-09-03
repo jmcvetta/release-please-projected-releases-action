@@ -196,7 +196,6 @@ export async function buildComment(options: RunOptions): Promise<Outcome> {
     ...(options.releasePrs ? { releasePrs: options.releasePrs } : {}),
     ...(options.headSha ? { headSha: options.headSha } : {}),
     ...(options.runUrl ? { runUrl: options.runUrl } : {}),
-    ...(options.base ? { base: options.base } : {}),
     ...(options.advisories ? { advisories: options.advisories } : {}),
     ...(options.now ? { now: options.now } : {}),
   });
