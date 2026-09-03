@@ -1,10 +1,15 @@
 /**
  * render writes the sticky comment body.
  *
- * It is tool output, not a message: the table first, then only the notes
- * needed to read it. Most pull requests in a repository like this one release
- * nothing at all, so "nothing will be released" is stated as an answer rather
- * than left as silence.
+ * It is tool output, not a message: a one-line verdict, then one table
+ * carrying every component's numbers — the ones that moved and the ones that
+ * did not — and then only the notes needed to read it. Most pull requests in
+ * a repository like this one release nothing at all, so "nothing will be
+ * released" is stated as an answer rather than left as silence.
+ *
+ * The table is the work product and is never collapsed. What is collapsed is
+ * genuinely secondary: the changelog preview, and the per-file listing behind
+ * the table's file counts.
  */
 
 import { DEFAULT_TYPES, titleType } from "./conventional.js";
@@ -48,12 +53,27 @@ function visibleTitle(options: RenderOptions): boolean {
   return types.visible.has(titleType(options.title) ?? "");
 }
 
-/** Row is one component's line in the table. */
+/**
+ * Row is one component's line in the table.
+ *
+ * Every configured package gets one, whether or not this pull request moves
+ * it. A row with no release at all is not noise: it is the evidence that the
+ * component was considered and came out unchanged, which is the whole answer
+ * on the common pull request.
+ */
 interface Row {
   pkg: PackageConfig;
-  projected: Release;
+  /** projected is the release merging this pull request leads to, if any. */
+  projected: Release | undefined;
+  /** pending is what the target branch releases without it, if anything. */
   pending: Release | undefined;
+  /** files are this pull request's files that fall under the package. */
+  files: readonly string[];
 }
+
+/** MovedRow is a row whose version this pull request changes, so it has a
+ * projected release and a tag to name. */
+type MovedRow = Row & { projected: Release };
 
 /**
  * bumpLevel names the size of a bump by comparing the two versions, rather
@@ -145,41 +165,13 @@ function renderProjection(
   projection: Projection,
   options: RenderOptions,
 ): string[] {
+  const { rows, unmatched } = buildRows(projection);
+
   const touchedPackages = [...projection.touched.keys()].flatMap((path) => {
     const pkg = projection.packages.find((p) => p.path === path);
     return pkg ? [pkg] : [];
   });
   const touched = new Set(touchedPackages.map((p) => p.releaseComponent));
-
-  // Joined on the name release-please attributes releases to, not on the
-  // name the config spells: a package that declares no component still gets
-  // one, and a package that keeps its component out of its tags gets none.
-  const byComponent = groupBy(projection.packages, (p) => p.releaseComponent);
-  const shared = new Set(
-    [...byComponent].filter(([, list]) => list.length > 1).map(([c]) => c),
-  );
-  const unclaimed = claimOrder(byComponent, new Set(projection.touched.keys()));
-  const pendingBy = groupBy(projection.pending, (r) => r.component);
-
-  // Every release gets a row. A release whose component matches no configured
-  // package is the one case where that takes inventing the package, and it is
-  // worth the invention: dropping the row instead made the comment say "None
-  // -- release-please projects no release" for a merge that cuts a tag, which
-  // is the false negative this whole action exists to prevent, and it said it
-  // in silence.
-  const unmatched: string[] = [];
-  const rows: Row[] = projection.projected.map((projected) => {
-    // Each release takes a package of its own. A component name is not
-    // unique across packages, and handing the same package to two releases
-    // lent one of them the other's current version, path and tag.
-    const pkg = unclaimed.get(projected.component)?.shift();
-    if (!pkg) unmatched.push(projected.component);
-    return {
-      pkg: pkg ?? unconfigured(projected, projection),
-      projected,
-      pending: pendingBy.get(projected.component)?.shift(),
-    };
-  });
 
   // A moved version is this pull request's doing whatever files it changed:
   // the two passes differ only by the merge, so nothing else could have moved
@@ -191,47 +183,38 @@ function renderProjection(
   // A version that does not move is another matter. That release is coming
   // from commits already on the target branch, so it is only this pull
   // request's business for a component it actually reaches.
-  const moved = rows.filter((r) => r.pending?.version !== r.projected.version);
+  const moved = rows.filter(
+    (r): r is MovedRow =>
+      r.projected !== undefined && r.projected.version !== r.pending?.version,
+  );
   const unmoved = rows.filter(
     (r) =>
-      r.pending?.version === r.projected.version &&
-      touched.has(r.projected.component),
+      r.projected !== undefined &&
+      r.projected.version === r.pending?.version &&
+      touched.has(r.pkg.releaseComponent),
   );
 
-  const out = ["## Projected releases", ""];
+  const out = [
+    "## Projected releases",
+    "",
+    verdict(projection, options, moved, unmoved, touchedPackages),
+    "",
+    ...table(rows, options),
+  ];
 
-  if (moved.length === 0) {
-    out.push(
-      ...(unmoved.length > 0
-        ? ["No component's version changes."]
-        : none(projection, options, touchedPackages)),
-    );
-  } else {
-    out.push(
-      "| Component | Tag | Current | Without this PR | Projected |",
-      "| --- | --- | --- | --- | --- |",
-    );
-    for (const row of moved) {
-      out.push(
-        `| \`${row.pkg.component}\`` +
-          ` | \`${tagFor(row.pkg, row.projected.version)}\`` +
-          ` | ${row.pkg.current ?? "—"}` +
-          ` | ${pendingCell(row, options)}` +
-          ` | **${row.projected.version}** |`,
-      );
-    }
-    out.push("", basis(moved, projection));
-  }
-
-  if (unmoved.length > 0) {
-    out.push("", ...unmoved.map((row) => unmovedNote(row, options)));
-  }
-
-  const warnings = warn(projection, options, moved, unmoved, {
+  const byComponent = groupBy(projection.packages, (p) => p.releaseComponent);
+  const shared = new Set(
+    [...byComponent].filter(([, list]) => list.length > 1).map(([c]) => c),
+  );
+  const warnings = warn(projection, options, {
     unmatched,
     shared: byComponent,
+    // Only where a release actually had to be attributed. Every package has
+    // a row of its own now, so a shared component name is ambiguous only
+    // when there is a release to hand to one of them.
     named: new Set(
-      [...moved, ...unmoved]
+      rows
+        .filter((r) => r.projected ?? r.pending)
         .map((r) => r.pkg.releaseComponent)
         .filter((c) => shared.has(c)),
     ),
@@ -239,8 +222,158 @@ function renderProjection(
   if (warnings.length > 0) out.push("", ...warnings);
 
   if (moved.length > 0) out.push("", changelog(moved));
-  out.push("", components(projection));
+  out.push("", matchedFiles(projection));
   return out;
+}
+
+/**
+ * buildRows joins the two passes' releases onto the configured packages.
+ *
+ * Joined on the name release-please attributes releases to, not on the name
+ * the config spells: a package that declares no component still gets one, and
+ * a package that keeps its component out of its tags gets none.
+ *
+ * Every release gets a row, including one whose component matches no
+ * configured package — that is the one case where a row takes inventing the
+ * package, and it is worth the invention: dropping the row instead made the
+ * comment report no release for a merge that cuts a tag, which is the false
+ * negative this whole action exists to prevent, and it did so in silence.
+ */
+function buildRows(projection: Projection): {
+  rows: Row[];
+  unmatched: string[];
+} {
+  const byComponent = groupBy(projection.packages, (p) => p.releaseComponent);
+  const projectedBy = groupBy(projection.projected, (r) => r.component);
+  const pendingBy = groupBy(projection.pending, (r) => r.component);
+
+  const claimed = new Map<PackageConfig, Pick<Row, "projected" | "pending">>();
+  const unmatched: string[] = [];
+  const invented: Row[] = [];
+
+  // Over every component either side names, not just the configured ones: a
+  // release whose component matches no package is exactly the case the
+  // invented row exists for, and iterating the configuration alone would
+  // never reach it.
+  const order = claimOrder(byComponent, new Set(projection.touched.keys()));
+  const components = new Set([
+    ...byComponent.keys(),
+    ...projectedBy.keys(),
+    ...pendingBy.keys(),
+  ]);
+  for (const component of components) {
+    const packages = order.get(component) ?? [];
+    // Each release takes a package of its own. A component name is not
+    // unique across packages, and handing the same package to two releases
+    // lent one of them the other's current version, path and tag.
+    const projected = [...(projectedBy.get(component) ?? [])];
+    const pending = [...(pendingBy.get(component) ?? [])];
+    for (const pkg of packages) {
+      claimed.set(pkg, {
+        projected: projected.shift(),
+        pending: pending.shift(),
+      });
+    }
+    for (const release of projected) {
+      unmatched.push(component);
+      invented.push({
+        pkg: unconfigured(release, projection),
+        projected: release,
+        pending: pending.shift(),
+        files: [],
+      });
+    }
+  }
+
+  const rows = projection.packages.map((pkg) => ({
+    pkg,
+    projected: claimed.get(pkg)?.projected,
+    pending: claimed.get(pkg)?.pending,
+    files: projection.touched.get(pkg.path) ?? [],
+  }));
+  return { rows: [...rows, ...invented], unmatched };
+}
+
+/**
+ * table is the comment's work product: one row per component, carrying the
+ * numbers rather than a sentence describing the difference between two of
+ * them.
+ *
+ * **Without this PR** is what the target branch releases on its own, which is
+ * a weaker claim than "already pending": the release pull request listing is
+ * skipped by `link-release-prs: false` and degrades to empty when the call
+ * fails, so the cell links a standing pull request only when one was found
+ * and otherwise just states the version.
+ */
+function table(rows: readonly Row[], options: RenderOptions): string[] {
+  const out = [
+    "| Component | Path | Files | Current | Without this PR | Projected |",
+    "| --- | --- | --- | --- | --- | --- |",
+  ];
+  for (const row of rows) {
+    out.push(
+      `| ${code(row.pkg.component)}` +
+        ` | ${code(row.pkg.path)}` +
+        ` | ${row.files.length || "—"}` +
+        ` | ${row.pkg.current ?? "—"}` +
+        ` | ${pendingCell(row, options)}` +
+        ` | ${projectedCell(row)} |`,
+    );
+  }
+  return out;
+}
+
+/** projectedCell is the version merging this pull request leads to, bold only
+ * when the merge is what moves it: a version the target branch releases on its
+ * own is not this pull request's bump to claim. */
+function projectedCell(row: Row): string {
+  const version = row.projected?.version;
+  if (version === undefined) return "—";
+  return version === row.pending?.version ? version : `**${version}**`;
+}
+
+/** code spells a cell as inline code, or as an em dash when there is nothing
+ * to spell — an unconfigured package has no path, and a package that keeps
+ * its component out of its tags may have no name. */
+function code(value: string): string {
+  return value ? `\`${value}\`` : "—";
+}
+
+/**
+ * verdict is the single line answering the question the comment exists for,
+ * before any of the evidence.
+ *
+ * Three answers, one line each: which tags the merge cuts, that it moves no
+ * version and why, or that nothing releases at all and why. The reasons the
+ * reader could read off the table — that a version is the same in two columns
+ * — are not repeated here.
+ */
+function verdict(
+  projection: Projection,
+  options: RenderOptions,
+  moved: readonly MovedRow[],
+  unmoved: readonly Row[],
+  touchedPackages: readonly PackageConfig[],
+): string {
+  if (moved.length > 0) {
+    const tags = moved
+      .map((r) => `\`${tagFor(r.pkg, r.projected.version)}\``)
+      .join(", ");
+    return `Cuts ${tags} — ${basis(moved, projection)}`;
+  }
+
+  const type = titleType(options.title) ?? "";
+  if (unmoved.length > 0) {
+    // A visible type still contributes to the release already coming even
+    // though it moves no number: its changelog line ships in that version.
+    // Saying only that the version does not move reads as contributing
+    // nothing, which for a `feat:` is wrong.
+    return visibleTitle(options)
+      ? `No version change — \`${type}\` adds a changelog line to a release` +
+          ` ${branch(options)} already makes.`
+      : `No version change — \`${type}\` is a hidden type.`;
+  }
+  return none(projection, options, touchedPackages);
 }
 
 /**
@@ -319,16 +452,18 @@ function claimOrder(
  * in the title.
  *
  * Both statements are scoped to the components this pull request touches,
- * which is what an empty table actually establishes. A standing release
+ * which is what an empty answer actually establishes. A standing release
  * pull request for some other component says nothing about this one, and
  * reading it as "nothing user-facing is pending" contradicts the warning
- * below, which counts every pending release in the repository.
+ * below, which counts every pending release in the repository. The table
+ * carries that other component's numbers regardless, so scoping the sentence
+ * hides nothing.
  */
 function none(
   projection: Projection,
   options: RenderOptions,
   touched: readonly PackageConfig[],
-): string[] {
+): string {
   if (touched.length === 0) {
     const dirs = [
       ...new Set(projection.files.map((f) => f.split("/")[0] ?? f)),
@@ -337,7 +472,7 @@ function none(
     if (dirs.length > 0) {
       line += ` Touched: ${dirs.map((d) => `\`${d}\``).join(", ")}.`;
     }
-    return [line];
+    return line;
   }
 
   const types = options.types ?? DEFAULT_TYPES;
@@ -347,25 +482,10 @@ function none(
   // attributes files itself, so it can project nothing for a component this
   // preview counts as touched (a path the package excludes, say). Whatever
   // the cause, the title is not a hidden type and must not be called one.
-  const line = visibleTitle(options)
+  return visibleTitle(options)
     ? `None — release-please projects no release for the components this` +
-      ` pull request touches, and none has one pending.`
-    : `None — \`${type}\` is a hidden type, and no component it touches has` +
-      ` a release pending. Only ${visible} open a release.`;
-  return [
-    line,
-    "",
-    `Components touched: ${nameList(touched)}.`,
-  ];
-}
-
-/** nameList spells a set of packages by the name their tags carry, falling
- * back to the path for a package whose tags name no component. */
-function nameList(packages: readonly PackageConfig[]): string {
-  return [...new Set(packages.map((p) => p.component || p.path))]
-    .sort()
-    .map((name) => `\`${name}\``)
-    .join(", ");
+        ` pull request touches, and none has one pending.`
+    : `None — \`${type}\` is a hidden type. Only ${visible} open a release.`;
 }
 
 /**
@@ -404,8 +524,8 @@ function pendingCell(row: Row, options: RenderOptions): string {
   return url ? `[${row.pending.version}](${url})` : row.pending.version;
 }
 
-/** basis is the one line stating what produced the table. */
-function basis(moved: Row[], projection: Projection): string {
+/** basis is the clause stating what produced the versions in the table. */
+function basis(moved: readonly MovedRow[], projection: Projection): string {
   const asked = projection.releaseAs;
   if (asked && !projection.ignoredReleaseAs) {
     if (moved.some((r) => r.projected.version === asked)) {
@@ -420,42 +540,6 @@ function basis(moved: Row[], projection: Projection): string {
   return `${levels.join(" / ")} bump.`;
 }
 
-/**
- * unmovedNote covers a component whose projected version is exactly what its
- * standing release pull request already holds.
- *
- * That release is coming from commits already on the target branch, so naming
- * its tag in the table would claim a bump this pull request did not cause.
- * Such rows move down here instead.
- *
- * A visible type still contributes to that release even though it moves no
- * number: its changelog line ships in the version already pending. Saying
- * only that the version does not move reads as contributing nothing, which
- * for a `feat:` is wrong.
- */
-function unmovedNote(row: Row, options: RenderOptions): string {
-  const url = releasePrUrl(row.pkg.component, options);
-  const version = row.projected.version;
-  const what = visibleTitle(options)
-    ? " this PR adds a changelog line to it, not a version."
-    : " this PR does not move it.";
-
-  // "Already pending" asserts that a release pull request is standing, which
-  // is only known when one was found. Without that, all this measured is that
-  // the target branch produces the same version on its own -- which is what
-  // gets said instead. Saying "pending" there contradicts the Current column
-  // in the very same comment, since a repository that has never released
-  // shows no current version and has no release pull request to point at.
-  //
-  // Not "there is no release pull request", either: the listing is skipped by
-  // `link-release-prs: false` and degrades to empty when the call fails, so an
-  // absent URL means it was not found, never that it does not exist.
-  const where = url
-    ? `[${version}](${url}), already pending;`
-    : `${version}, which ${branch(options)} already releases without it;`;
-  return `- \`${row.pkg.component}\` stays at ${where}${what}`;
-}
-
 /** branch names the target branch for prose, falling back to a generic
  * phrase when the caller did not say which it is. */
 function branch(options: RenderOptions): string {
@@ -466,8 +550,6 @@ function branch(options: RenderOptions): string {
 function warn(
   projection: Projection,
   options: RenderOptions,
-  moved: Row[],
-  unmoved: Row[],
   components: {
     unmatched: readonly string[];
     shared: ReadonlyMap<string, PackageConfig[]>;
@@ -508,29 +590,15 @@ function warn(
         " but editable.",
     );
   }
-  // Only a hidden type contributes nothing. A visible one whose version does
-  // not move still writes its changelog line into the release already
-  // pending, so telling its author otherwise is false twice over.
-  //
-  // The pending releases this speaks of are the ones noted just above, so it
-  // needs an unmoved row rather than a pending release anywhere in the
-  // repository. Without a row, none() has already given the whole answer.
-  if (moved.length === 0 && unmoved.length > 0 && !visibleTitle(options)) {
-    const type = titleType(options.title) ?? "";
-    warnings.push(
-      `- \`${type}\` adds no changelog line and changes no version.` +
-        ` ${branch(options)} releases the same versions without it.`,
-    );
-  }
   return warnings;
 }
 
 /** changelog shows the notes release-please rendered, which are the release
- * notes the tag will actually carry. */
-function changelog(moved: Row[]): string {
+ * notes the tag will actually carry. Secondary to the numbers, so collapsed. */
+function changelog(moved: readonly MovedRow[]): string {
   const body = moved
     .filter((r) => r.projected.notes)
-    .map((r) => `#### \`${r.pkg.component}\`\n\n${r.projected.notes}`)
+    .map((r) => `#### ${code(r.pkg.component)}\n\n${r.projected.notes}`)
     .join("\n\n");
   return [
     "<details><summary>Changelog preview</summary>",
@@ -541,28 +609,22 @@ function changelog(moved: Row[]): string {
   ].join("\n");
 }
 
-/** components is the collapsed working: which file pulled in which component,
- * so a surprising row can be traced to its cause. */
-function components(projection: Projection): string {
-  const lines = [
-    "<details><summary>Components</summary>",
-    "",
-    "| Component | Path | Current |",
-    "| --- | --- | --- |",
-  ];
-  for (const pkg of projection.packages) {
-    lines.push(
-      `| \`${pkg.component}\` | \`${pkg.path}\` | ${pkg.current ?? "—"} |`,
-    );
-  }
+/**
+ * matchedFiles is the working behind the table's file counts: which file
+ * pulled in which component, so a surprising count can be traced to its
+ * cause. Collapsed, because the count is the part that is read.
+ */
+function matchedFiles(projection: Projection): string {
+  const lines = ["<details><summary>Matched files</summary>", ""];
   for (const [path, files] of projection.touched) {
     const pkg = projection.packages.find((p) => p.path === path);
     const shown = files.slice(0, 10);
-    lines.push("", `\`${pkg?.component ?? path}\` matched:`);
+    lines.push(`\`${pkg?.component ?? path}\` matched:`);
     for (const file of shown) lines.push(`- \`${file}\``);
     if (files.length > shown.length) {
       lines.push(`- …and ${files.length - shown.length} more`);
     }
+    lines.push("");
   }
   // Which of the two rules applies depends on whether a package is rooted at
   // the repository. `splitFiles` hands a root package every file, so printing
@@ -571,7 +633,6 @@ function components(projection: Projection): string {
   // own repository, which releases in plain mode from `.`.
   const rooted = projection.packages.some((p) => p.path === ROOT_PACKAGE_PATH);
   lines.push(
-    "",
     rooted
       ? `Longest path wins; \`${ROOT_PACKAGE_PATH}\` takes every file besides.`
       : "Longest path wins; a repository-root file matches nothing.",

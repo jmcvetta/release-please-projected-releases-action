@@ -18,15 +18,21 @@ if that matters to you.
 ```
 ## Projected releases
 
-| Component | Tag | Current | Without this PR | Projected |
-| --- | --- | --- | --- | --- |
-| `acme-api` | `acme-api@v2.5.0` | 2.4.1 | 2.4.2 | **2.5.0** |
+Cuts `acme-api@v2.5.0` — minor bump.
 
-minor bump.
+| Component | Path | Files | Current | Without this PR | Projected |
+| --- | --- | --- | --- | --- | --- |
+| `acme-api` | `api` | 3 | 2.4.1 | 2.4.2 | **2.5.0** |
+| `acme-ui` | `ui` | — | 1.0.0 | — | — |
 
 <details><summary>Changelog preview</summary> … </details>
-<details><summary>Components</summary> … </details>
+<details><summary>Matched files</summary> … </details>
 ```
+
+The verdict is one line, the same shape every time: which tags the merge
+cuts, or that it moves no version and why. The table carries every
+component's numbers — including the ones that did not move — so the reader
+compares two columns rather than reading a sentence describing them.
 
 ## Why it exists
 

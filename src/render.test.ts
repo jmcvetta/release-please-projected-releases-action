@@ -64,17 +64,79 @@ describe("bumpLevel", () => {
   });
 });
 
-describe("the table", () => {
-  it("names the tag and both versions", () => {
+describe("the verdict line", () => {
+  it("names the tags a merge cuts, and the bump", () => {
     const out = body(
       projection({
         projected: [{ component: "acme-api", version: "2.5.0", notes: "- x" }],
       }),
     );
-    expect(out).toContain("`acme-api@v2.5.0`");
-    expect(out).toContain("| 2.4.1 |");
-    expect(out).toContain("**2.5.0**");
-    expect(out).toContain("minor bump.");
+    expect(out).toContain("Cuts `acme-api@v2.5.0` — minor bump.");
+  });
+
+  it("names every tag when a merge cuts several", () => {
+    const out = body(
+      projection({
+        projected: [
+          { component: "acme-api", version: "2.5.0", notes: "" },
+          { component: "acme-ui", version: "2.0.0", notes: "" },
+        ],
+      }),
+    );
+    expect(out).toContain("Cuts `acme-api@v2.5.0`, `acme-ui@v2.0.0`");
+    expect(out).toContain("minor / major bump.");
+  });
+
+  // The comment is read for its answer; the evidence is what follows it.
+  it("comes before the table", () => {
+    const out = body(projection());
+    expect(out.indexOf("None —")).toBeLessThan(out.indexOf("| Component |"));
+  });
+});
+
+describe("the table", () => {
+  it("carries the versions of a component this pull request moves", () => {
+    const out = body(
+      projection({
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "- x" }],
+        pending: [{ component: "acme-api", version: "2.4.2", notes: "" }],
+      }),
+    );
+    expect(out).toContain(
+      "| `acme-api` | `api` | 1 | 2.4.1 | 2.4.2 | **2.5.0** |",
+    );
+  });
+
+  // It is the comment's work product: which component each changed file was
+  // attributed to and what that component's version does. Behind a
+  // `<details>` it was the only content of substance on the common pull
+  // request, and hidden.
+  it("is not collapsed", () => {
+    const out = body(projection());
+    expect(out.indexOf("| Component |")).toBeLessThan(out.indexOf("<details>"));
+  });
+
+  // A component that releases nothing is not noise: its row is the evidence
+  // that it was considered and came out unchanged.
+  it("keeps a row for every configured component", () => {
+    const out = body(
+      projection({
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
+    );
+    expect(out).toContain("| `acme-ui` | `ui` | — | 1.0.0 | — | — |");
+  });
+
+  it("counts the files each component claimed", () => {
+    const out = body(
+      projection({
+        touched: new Map([["api", ["api/a.ts", "api/b.ts", "api/c.ts"]]]),
+        files: ["api/a.ts", "api/b.ts", "api/c.ts"],
+      }),
+    );
+    expect(out).toContain("| `acme-api` | `api` | 3 |");
+    expect(out).toContain("<details><summary>Matched files</summary>");
+    expect(out).toContain("- `api/b.ts`");
   });
 
   it("links the pending version to the release pull request holding it", () => {
@@ -88,7 +150,7 @@ describe("the table", () => {
     expect(out).toContain("[2.5.0](https://example.test/pr/9)");
   });
 
-  it("shows the changelog release-please rendered", () => {
+  it("shows the changelog release-please rendered, collapsed", () => {
     const out = body(
       projection({
         projected: [
@@ -96,7 +158,7 @@ describe("the table", () => {
         ],
       }),
     );
-    expect(out).toContain("Changelog preview");
+    expect(out).toContain("<details><summary>Changelog preview</summary>");
     expect(out).toContain("### Features");
   });
 });
@@ -107,12 +169,11 @@ describe("a release this pull request does not cause", () => {
     pending: [{ component: "acme-api", version: "2.5.0", notes: "" }],
   });
 
-  // Naming its tag in the table would claim a bump that is coming from
-  // commits already on the target branch.
-  it("moves out of the table into a note", () => {
-    const out = body(absorbed);
-    expect(out).toContain("No component's version changes.");
-    expect(out).toContain("stays at 2.5.0");
+  // Bolding it would claim a bump that is coming from commits already on the
+  // target branch. The two equal cells say the rest.
+  it("shows the same version in both columns, unbolded", () => {
+    const out = body(absorbed, { title: "docs: a note" });
+    expect(out).toContain("| `acme-api` | `api` | 1 | 2.4.1 | 2.5.0 | 2.5.0 |");
     expect(out).not.toContain("**2.5.0**");
   });
 
@@ -121,38 +182,43 @@ describe("a release this pull request does not cause", () => {
   // comment: a repository that has never released shows no current version
   // and has no release pull request to point at. Observed on this action's
   // own repository, which reported "stays at 1.0.0, already pending" beside
-  // "Current: —" before any release existed.
+  // "Current: —" before any release existed. The column heading makes only
+  // the claim the second pass actually establishes.
   it("does not claim a release is pending when none was found", () => {
     const out = body(absorbed, { base: "master" });
+    expect(out).toContain("| Without this PR |");
     expect(out).not.toContain("already pending");
-    expect(out).toContain("`master` already releases without it");
   });
 
-  it("says pending, and links it, when a release PR was found", () => {
+  it("links the cell when a release PR was found", () => {
     const out = body(absorbed, {
       releasePrs: new Map([["acme-api", "https://x/9"]]),
     });
-    expect(out).toContain("stays at [2.5.0](https://x/9), already pending;");
+    expect(out).toContain("| [2.5.0](https://x/9) | 2.5.0 |");
+  });
+
+  // The feature does ship, in the notes of the version already coming.
+  it("credits a visible type with the changelog line it adds", () => {
+    const out = body(absorbed, { title: "feat: another feature", base: "main" });
+    expect(out).toContain(
+      "No version change — `feat` adds a changelog line to a release" +
+        " `main` already makes.",
+    );
   });
 
   it("falls back to a generic phrase when no base branch was given", () => {
-    expect(body(absorbed)).toContain("the target branch already releases without it");
+    expect(body(absorbed)).toContain("the target branch already makes.");
   });
 
-  // The feature does ship, in the notes of the version already pending.
-  it("credits a visible type with the changelog line it adds", () => {
-    const out = body(absorbed, { title: "feat: another feature" });
-    expect(out).toContain("this PR adds a changelog line to it, not a version.");
-    expect(out).not.toContain("adds no changelog line");
-  });
-
-  it("tells a hidden type that it contributes nothing", () => {
+  // Three sentences where one will do: the old comment stated the verdict,
+  // then repeated it as a per-component note, then again as a warning, with
+  // the branch name spelled out in two of them.
+  it("tells a hidden type it contributes nothing, once", () => {
     const out = body(absorbed, { title: "docs: a note", base: "master" });
-    expect(out).toContain("`docs` adds no changelog line and changes no version.");
-    expect(out).toContain("`master` releases the same versions without it.");
-    expect(out).toContain("this PR does not move it.");
-    // Same overclaim as the note above, in the warning.
-    expect(out).not.toContain("already pending");
+    expect(out).toContain("No version change — `docs` is a hidden type.");
+    expect(out).not.toContain("adds no changelog line");
+    expect(out).not.toContain("stays at");
+    expect(out.match(/`master`/g)).toBeNull();
   });
 });
 
@@ -167,27 +233,32 @@ describe("saying that nothing releases", () => {
     expect(out).toContain("no changed file is under a component path");
     expect(out).toContain("`job-descriptions`");
     expect(out).toContain("`pipeline.json`");
+    expect(out).toContain("| `acme-api` | `api` | — | 2.4.1 | — | — |");
   });
 
   it("blames the type when a component is touched but nothing releases", () => {
     const out = body(projection(), { title: "docs: a thing" });
-    expect(out).toContain("`docs` is a hidden type");
-    expect(out).toContain("Components touched: `acme-api`.");
+    expect(out).toContain("None — `docs` is a hidden type.");
+    expect(out).toContain("Only `feat`");
+    // Which component it touched is a column now, not a sentence.
+    expect(out).toContain("| `acme-api` | `api` | 1 |");
+    expect(out).not.toContain("Components touched:");
   });
 
   // Another component's standing release pull request is not this one's
   // business, and counting it made the verdict contradict the warning three
-  // lines below it.
-  it("scopes the pending claim to the components touched", () => {
+  // lines below it. The table carries that component's numbers regardless,
+  // so scoping the sentence hides nothing.
+  it("scopes the verdict to the components touched", () => {
     const out = body(
       projection({
+        projected: [{ component: "acme-ui", version: "1.1.0", notes: "" }],
         pending: [{ component: "acme-ui", version: "1.1.0", notes: "" }],
       }),
       { title: "docs: a thing" },
     );
-    expect(out).toContain("no component it touches has a release pending");
-    expect(out).not.toContain("nothing user-facing is pending");
-    expect(out).not.toContain("happen without it");
+    expect(out).toContain("None — `docs` is a hidden type.");
+    expect(out).toContain("| `acme-ui` | `ui` | — | 1.0.0 | 1.1.0 | 1.1.0 |");
   });
 
   // Reachable when release-please attributes a file to no component that this
@@ -196,7 +267,6 @@ describe("saying that nothing releases", () => {
     const out = body(projection(), { title: "feat: a thing" });
     expect(out).toContain("release-please projects no release");
     expect(out).not.toContain("hidden type");
-    expect(out).toContain("Components touched: `acme-api`.");
   });
 });
 
@@ -326,7 +396,7 @@ describe("linking an aggregated release pull request", () => {
     expect(out).toContain("[2.5.0](https://example.test/pr/9)");
   });
 
-  it("links an unmoved component's note to it too", () => {
+  it("links an unmoved component's row to it too", () => {
     const out = body(
       projection({
         projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
@@ -334,7 +404,7 @@ describe("linking an aggregated release pull request", () => {
       }),
       { releasePrs: aggregated },
     );
-    expect(out).toContain("stays at [2.5.0](https://example.test/pr/9)");
+    expect(out).toContain("| [2.5.0](https://example.test/pr/9) | 2.5.0 |");
   });
 
   // A repository that does separate its release pull requests can have one
@@ -394,12 +464,20 @@ describe("two packages under one component name", () => {
 
   it("gives each release a package of its own", () => {
     const out = body(both);
-    expect(out).toContain("| `acme-api` | `v2.5.0` | 2.4.1 |");
-    expect(out).toContain("| `acme-ui` | `v1.1.0` | 1.0.0 |");
+    expect(out).toContain("Cuts `v2.5.0`, `v1.1.0`");
+    expect(out).toContain("| `acme-api` | `api` | 1 | 2.4.1 | — | **2.5.0** |");
+    expect(out).toContain("| `acme-ui` | `ui` | 1 | 1.0.0 | — | **1.1.0** |");
   });
 
   it("says the attribution is a guess", () => {
     expect(body(both)).toContain("release under one component name");
+  });
+
+  // Every package has a row of its own now, so the names are only ambiguous
+  // when there is a release to hand to one of them.
+  it("stays quiet until a release has to be attributed", () => {
+    const out = body({ ...both, projected: [], pending: [] });
+    expect(out).not.toContain("release under one component name");
   });
 
   it("stays quiet when every component names one package", () => {
@@ -426,7 +504,8 @@ describe("a release whose component matches no configured package", () => {
 
   it("keeps the row rather than reporting none", () => {
     const out = body(stray);
-    expect(out).toContain("| `ghost` | `ghost@v3.1.0` |");
+    expect(out).toContain("Cuts `ghost@v3.1.0`");
+    expect(out).toContain("| `ghost` | — | — | — | — | **3.1.0** |");
     expect(out).not.toContain("None —");
   });
 
@@ -445,8 +524,9 @@ describe("a release whose component matches no configured package", () => {
         ],
       }),
     );
-    expect(out).toContain("| `acme-api` | `acme-api@v2.5.0` | 2.4.1 |");
-    expect(out).toContain("| `ghost` | `ghost@v3.1.0` | — |");
+    expect(out).toContain("Cuts `acme-api@v2.5.0`, `ghost@v3.1.0`");
+    expect(out).toContain("| `acme-api` | `api` | 1 | 2.4.1 |");
+    expect(out).toContain("| `ghost` | — | — | — |");
   });
 
   it("spells an unnamed release's tag without a component", () => {
@@ -455,18 +535,18 @@ describe("a release whose component matches no configured package", () => {
         { component: "", version: "1.0.0", notes: "" },
       ] }),
     );
-    expect(out).toContain("`v1.0.0`");
+    expect(out).toContain("Cuts `v1.0.0`");
     expect(out).toContain("a component this comment cannot name");
   });
 });
 
-// The line under the Components listing states the rule that produced it,
+// The line under the matched-files listing states the rule that produced it,
 // and there are two rules. `splitFiles` skips a file with no `/` when
 // matching prefixes, but hands a package rooted at `.` every file there is --
 // so the root case needs the other sentence. Printed unconditionally, the
 // wrong one appeared on every comment this action posts on its own
 // repository, which releases in plain mode from `.`.
-describe("the rule printed under the components listing", () => {
+describe("the rule printed under the matched-files listing", () => {
   const ROOT: PackageConfig = {
     path: ".",
     component: "widgets",
@@ -475,6 +555,17 @@ describe("the rule printed under the components listing", () => {
     separator: "-",
     includeComponent: false,
   };
+
+  it("truncates a long listing rather than printing the whole diff", () => {
+    const files = Array.from({ length: 14 }, (_, i) => `api/f${i}.ts`);
+    const out = body(
+      projection({ touched: new Map([["api", files]]), files }),
+    );
+    expect(out).toContain("| `acme-api` | `api` | 14 |");
+    expect(out).toContain("- `api/f9.ts`");
+    expect(out).not.toContain("- `api/f10.ts`");
+    expect(out).toContain("- …and 4 more");
+  });
 
   it("says a root file matches nothing when no package is rooted", () => {
     expect(body(projection())).toContain(
