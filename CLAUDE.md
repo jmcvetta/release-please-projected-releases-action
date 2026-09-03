@@ -133,27 +133,36 @@ PR_BODY`, squash-only. So the PR **title** becomes the commit subject
 release-please parses, and the PR **body** becomes the commit body carrying
 any `Release-As:` trailer. Check both before merging.
 
-**`PR_BODY` does not mean the body verbatim.** Text can appear below the
-trailer between the stored body and the commit, and the two merges so far
-did not agree on what:
+**`PR_BODY` does not mean the body verbatim.** Text appears below the trailer
+between the stored body and the commit, and what appears is decided by **how
+many commits the branch held**:
 
-| squash commit | ends with |
-|---|---|
-| `cd3ef99` (#1) | the trailer, then `---------`, then `Co-authored-by:` |
-| `7594442` (#7) | `Co-authored-by:` with no rule before it |
-| `a8b5a8f` (#11) | the trailer, then `---------`, then `Co-authored-by:` |
+| squash commit | commits on the branch | ends with |
+|---|---|---|
+| `cd3ef99` (#1) | 26 | the trailer, then `---------`, then `Co-authored-by:` |
+| `561eba1` (#2) | 5 | the trailer, then `---------`, then `Co-authored-by:` |
+| `7594442` (#7) | 1 | `Co-authored-by:` with no rule before it |
+| `a8b5a8f` (#11) | 5 | the trailer, then `---------`, then `Co-authored-by:` |
+| `e7776a8` (#12) | 10 | the trailer, then `---------`, then `Co-authored-by:` |
 
-Neither `---------` nor the co-author line was in the stored body. What
-decides the difference is **not established** -- do not write down a cause
-here without measuring one. What is established is the consequence: a rule
-below the trailer voids the note, a bare `Co-authored-by:` does not.
+Five for five: a branch of more than one commit gets the `---------`
+separator above the appended co-author lines, and a branch of exactly one
+gets the co-author line bare. Neither the rule nor the co-author line was in
+any of the stored bodies. A bare `Co-authored-by:` is itself a trailer, so it
+joins the trailer block rather than ending it, and the note survives; the rule
+is a paragraph of prose as far as the parser is concerned, and it does not.
 
-**#11 was the pull request written to fix #1's voided trailer, and it was
-voided in exactly the same way**, having been merged without editing the merge
-box. Two for three now. So this is the common case rather than the accident,
-and a `Release-As:` trailer that reaches `master` through an unedited merge box
-should be expected to do nothing. The release pull request it produced asks for
-1.0.0, which is the number the trailer existed to prevent.
+So the thing that decides whether a `Release-As:` reaches release-please is a
+property of the branch, and it is settled before the pull request is even
+opened: **a pull request carrying a `Release-As:` trailer goes in as exactly
+one commit.** Squash the branch first.
+
+That matters because the merge-box edit, on its own, has now failed three
+times. #1's trailer was voided; #11 was written to correct it and was voided
+the same way; #12 was written knowing both, said in bold in its own body that
+the merge box had to be cleared, and was voided the same way again. An
+instruction that has to be carried out at the moment of merging is not a
+mechanism. The branch shape is.
 
 Measured on this repository's own #1 by running release-please's
 `parseConventionalCommits` over each shape:
@@ -166,14 +175,16 @@ Measured on this repository's own #1 by running release-please's
 | trailer, then `---` | **absent** |
 
 #1's stored body was correct and verified correct before merging. The trailer
-was voided anyway, because the corruption happened at squash time, in a
-message nobody had looked at yet: release-please computed its default first
-version of 1.0.0 and staged it on its release branch. Nothing was released --
-no tag has been cut -- so the version is still recoverable, but not by
-anything that was checked before the merge. Verifying the stored body is
-necessary and not sufficient: **the last thing to check is the merge box
-itself, which is editable.** Delete the `---------` block there, or move the
-trailer below it, before confirming the merge.
+was voided anyway, because the corruption happens at squash time, in a message
+nobody had looked at yet: release-please computed its default first version of
+1.0.0 and staged it on its release branch, where it still sits as #13. Nothing
+has been released and no tag has been cut, so the version is still open.
+
+Verifying the stored body is necessary and not sufficient. Keep both checks,
+in this order: **open the pull request from a single commit**, and then, since
+the merge box is editable and holds the text that actually becomes the commit,
+**read it before confirming** -- delete the `---------` block there, or move
+the trailer below it.
 
 ## The release job needs permission to open a pull request
 
