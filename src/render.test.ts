@@ -54,33 +54,20 @@ describe("tagFor", () => {
 });
 
 describe("the verdict line", () => {
-  // The tags, and nothing else. Naming the bump size beside them restated
-  // Current and Projected, two columns of the very table the reader is being
-  // pointed at.
-  it("is the tags a merge cuts", () => {
+  // What releases is entirely in the row -- the version, whether this pull
+  // request is what moves it, and the tag. A line above it repeating any of
+  // that is a caption on a photograph of itself.
+  it("is absent when the table answers on its own", () => {
     const out = body(
       projection({
         projected: [{ component: "acme-api", version: "2.5.0", notes: "- x" }],
       }),
     );
-    expect(out).toContain("\n`acme-api@v2.5.0`\n");
-    expect(out).not.toContain("bump");
+    expect(out).toContain("## Projected releases\n\n| Component |");
   });
 
-  it("names every tag when a merge cuts several", () => {
-    const out = body(
-      projection({
-        projected: [
-          { component: "acme-api", version: "2.5.0", notes: "" },
-          { component: "acme-ui", version: "2.0.0", notes: "" },
-        ],
-      }),
-    );
-    expect(out).toContain("\n`acme-api@v2.5.0`, `acme-ui@v2.0.0`\n");
-  });
-
-  // The comment is read for its answer; the evidence is what follows it.
-  it("comes before the table", () => {
+  // Why nothing releases is nowhere in a row, so it gets the line.
+  it("says why when nothing releases, above the table", () => {
     const out = body(projection(), { title: "docs: a thing" });
     expect(out.indexOf("None —")).toBeLessThan(out.indexOf("| Component |"));
   });
@@ -95,7 +82,7 @@ describe("the table", () => {
       }),
     );
     expect(out).toContain(
-      "| `acme-api` | `api` | 1 | 2.4.1 | 2.4.2 | **2.5.0** |",
+      "| `acme-api` | `api` | 1 | 2.4.1 | 2.4.2 | **2.5.0** | `acme-api@v2.5.0` |",
     );
   });
 
@@ -116,7 +103,7 @@ describe("the table", () => {
         projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
       }),
     );
-    expect(out).toContain("| `acme-ui` | `ui` | — | 1.0.0 | — | — |");
+    expect(out).toContain("| `acme-ui` | `ui` | — | 1.0.0 | — | — | — |");
   });
 
   it("counts the files each component claimed", () => {
@@ -165,7 +152,9 @@ describe("a release this pull request does not cause", () => {
   // target branch. The two equal cells say the rest.
   it("shows the same version in both columns, unbolded", () => {
     const out = body(absorbed, { title: "docs: a note" });
-    expect(out).toContain("| `acme-api` | `api` | 1 | 2.4.1 | 2.5.0 | 2.5.0 |");
+    expect(out).toContain(
+      "| `acme-api` | `api` | 1 | 2.4.1 | 2.5.0 | 2.5.0 | `acme-api@v2.5.0` |",
+    );
     expect(out).not.toContain("**2.5.0**");
   });
 
@@ -219,7 +208,7 @@ describe("saying that nothing releases", () => {
     expect(out).toContain("no changed file is under a component path");
     expect(out).toContain("`job-descriptions`");
     expect(out).toContain("`pipeline.json`");
-    expect(out).toContain("| `acme-api` | `api` | — | 2.4.1 | — | — |");
+    expect(out).toContain("| `acme-api` | `api` | — | 2.4.1 | — | — | — |");
   });
 
   it("blames the type when a component is touched but nothing releases", () => {
@@ -244,7 +233,9 @@ describe("saying that nothing releases", () => {
       { title: "docs: a thing" },
     );
     expect(out).toContain("None — `docs` is a hidden type.");
-    expect(out).toContain("| `acme-ui` | `ui` | — | 1.0.0 | 1.1.0 | 1.1.0 |");
+    expect(out).toContain(
+      "| `acme-ui` | `ui` | — | 1.0.0 | 1.1.0 | 1.1.0 | `acme-ui@v1.1.0` |",
+    );
   });
 
   // Reachable when release-please attributes a file to no component that this
@@ -257,6 +248,9 @@ describe("saying that nothing releases", () => {
 });
 
 describe("Release-As", () => {
+  // Why a version came out as it did is otherwise the commit type, in the
+  // title just above. A note that overrode it is not, so it is said once,
+  // under the table it explains.
   it("says the note forced the version", () => {
     const out = body(
       projection({
@@ -264,9 +258,19 @@ describe("Release-As", () => {
         projected: [{ component: "acme-api", version: "9.9.9", notes: "" }],
       }),
     );
-    expect(out).toContain(
-      "`acme-api@v9.9.9` — `Release-As: 9.9.9` forces the version.",
+    expect(out).toContain("- `Release-As: 9.9.9` forces the version.");
+    expect(out.indexOf("| Component |")).toBeLessThan(
+      out.indexOf("forces the version"),
     );
+  });
+
+  it("stays quiet when no note asked for the version release-please chose", () => {
+    const out = body(
+      projection({
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
+    );
+    expect(out).not.toContain("forces the version");
   });
 
   it("warns when release-please returned a different version", () => {
@@ -452,9 +456,12 @@ describe("two packages under one component name", () => {
 
   it("gives each release a package of its own", () => {
     const out = body(both);
-    expect(out).toContain("\n`v2.5.0`, `v1.1.0`\n");
-    expect(out).toContain("| `acme-api` | `api` | 1 | 2.4.1 | — | **2.5.0** |");
-    expect(out).toContain("| `acme-ui` | `ui` | 1 | 1.0.0 | — | **1.1.0** |");
+    expect(out).toContain(
+      "| `acme-api` | `api` | 1 | 2.4.1 | — | **2.5.0** | `v2.5.0` |",
+    );
+    expect(out).toContain(
+      "| `acme-ui` | `ui` | 1 | 1.0.0 | — | **1.1.0** | `v1.1.0` |",
+    );
   });
 
   it("says the attribution is a guess", () => {
@@ -492,8 +499,7 @@ describe("a release whose component matches no configured package", () => {
 
   it("keeps the row rather than reporting none", () => {
     const out = body(stray);
-    expect(out).toContain("\n`ghost@v3.1.0`\n");
-    expect(out).toContain("| `ghost` | — | — | — | — | **3.1.0** |");
+    expect(out).toContain("| `ghost` | — | — | — | — | **3.1.0** | `ghost@v3.1.0` |");
     expect(out).not.toContain("None —");
   });
 
@@ -512,9 +518,8 @@ describe("a release whose component matches no configured package", () => {
         ],
       }),
     );
-    expect(out).toContain("\n`acme-api@v2.5.0`, `ghost@v3.1.0`\n");
-    expect(out).toContain("| `acme-api` | `api` | 1 | 2.4.1 |");
-    expect(out).toContain("| `ghost` | — | — | — |");
+    expect(out).toContain("| `acme-api` | `api` | 1 | 2.4.1 | — | **2.5.0** | `acme-api@v2.5.0` |");
+    expect(out).toContain("| `ghost` | — | — | — | — | **3.1.0** | `ghost@v3.1.0` |");
   });
 
   it("spells an unnamed release's tag without a component", () => {
@@ -523,7 +528,7 @@ describe("a release whose component matches no configured package", () => {
         { component: "", version: "1.0.0", notes: "" },
       ] }),
     );
-    expect(out).toContain("\n`v1.0.0`\n");
+    expect(out).toContain("| **1.0.0** | `v1.0.0` |");
     expect(out).toContain("a component this comment cannot name");
   });
 });

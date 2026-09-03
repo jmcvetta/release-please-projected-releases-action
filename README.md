@@ -18,21 +18,24 @@ if that matters to you.
 ```
 ## Projected releases
 
-`acme-api@v2.5.0`
-
-| Component | Path | Files | Current | Without this PR | Projected |
-| --- | --- | --- | --- | --- | --- |
-| `acme-api` | `api` | 3 | 2.4.1 | 2.4.2 | **2.5.0** |
-| `acme-ui` | `ui` | — | 1.0.0 | — | — |
+| Component | Path | Files | Current | Without this PR | Projected | Tag |
+| --- | --- | --- | --- | --- | --- | --- |
+| `acme-api` | `api` | 3 | 2.4.1 | 2.4.2 | **2.5.0** | `acme-api@v2.5.0` |
+| `acme-ui` | `ui` | — | 1.0.0 | — | — | — |
 
 <details><summary>Changelog preview</summary> … </details>
 <details><summary>Matched files</summary> … </details>
 ```
 
-The first line is the answer and nothing else: the tags the merge cuts, or
-`None` with the one clause saying why. The table carries every component's
-numbers — including the ones that did not move — so the reader compares two
-columns rather than reading a sentence describing them.
+The table is the whole answer, so it is never collapsed and every component
+gets a row — including the ones that did not move, which is what makes the
+comparison a comparison. **Tag** is the only cell that is not arithmetic on
+the others: `include-component-in-tag` and `tag-separator` decide it, and a
+reader cannot spell it from the component name and the version.
+
+A line appears above the table only when no row can answer — `None — \`docs\`
+is a hidden type.` A merge that does release gets no line, because the row
+already says what, how much, and under which tag.
 
 ## Why it exists
 

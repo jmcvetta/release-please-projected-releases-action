@@ -1,13 +1,13 @@
 /**
  * render writes the sticky comment body.
  *
- * It is tool output, not a message: a one-line verdict — the tags the merge
- * cuts, or `None` and why — then one table carrying every component's numbers,
- * the ones that moved and the ones that did not, and then only the notes
- * needed to read it. Nothing in the line restates a column beside it. Most
- * pull requests in a repository like this one release nothing at all, so
- * "nothing will be released" is stated as an answer rather than left as
- * silence.
+ * It is tool output, not a message: one table carrying every component's
+ * numbers and tag — the ones that moved and the ones that did not — and only
+ * the notes needed to read it. A line above the table says why nothing
+ * releases, which no row can; when something does release, the row says it
+ * all and there is no line. Most pull requests in a repository like this one
+ * release nothing at all, so "nothing will be released" is stated as an
+ * answer rather than left as silence.
  *
  * The table is the work product and is never collapsed. What is collapsed is
  * genuinely secondary: the changelog preview, and the per-file listing behind
@@ -178,11 +178,11 @@ function renderProjection(
       touched.has(r.pkg.releaseComponent),
   );
 
+  const said = verdict(projection, options, moved, unmoved, touchedPackages);
   const out = [
     "## Projected releases",
     "",
-    verdict(projection, options, moved, unmoved, touchedPackages),
-    "",
+    ...(said ? [said, ""] : []),
     ...table(rows, options),
   ];
 
@@ -190,7 +190,7 @@ function renderProjection(
   const shared = new Set(
     [...byComponent].filter(([, list]) => list.length > 1).map(([c]) => c),
   );
-  const warnings = warn(projection, options, {
+  const warnings = warn(projection, options, moved, {
     unmatched,
     shared: byComponent,
     // Only where a release actually had to be attributed. Every package has
@@ -283,6 +283,12 @@ function buildRows(projection: Projection): {
  * numbers rather than a sentence describing the difference between two of
  * them.
  *
+ * **Tag** is the only cell that is not arithmetic on the others, and it is
+ * the one this action exists to show: the component name and the version do
+ * not spell it. `include-component-in-tag` and `tag-separator` do, and
+ * neither is anywhere else in the comment — this repository's own component
+ * is `release-please-projected-releases-action` and its tag is `v0.2.0`.
+ *
  * **Without this PR** is what the target branch releases on its own, which is
  * a weaker claim than "already pending": the release pull request listing is
  * skipped by `link-release-prs: false` and degrades to empty when the call
@@ -291,17 +297,19 @@ function buildRows(projection: Projection): {
  */
 function table(rows: readonly Row[], options: RenderOptions): string[] {
   const out = [
-    "| Component | Path | Files | Current | Without this PR | Projected |",
-    "| --- | --- | --- | --- | --- | --- |",
+    "| Component | Path | Files | Current | Without this PR | Projected | Tag |",
+    "| --- | --- | --- | --- | --- | --- | --- |",
   ];
   for (const row of rows) {
+    const version = row.projected?.version;
     out.push(
       `| ${code(row.pkg.component)}` +
         ` | ${code(row.pkg.path)}` +
         ` | ${row.files.length || "—"}` +
         ` | ${row.pkg.current ?? "—"}` +
         ` | ${pendingCell(row, options)}` +
-        ` | ${projectedCell(row)} |`,
+        ` | ${projectedCell(row)}` +
+        ` | ${version === undefined ? "—" : `\`${tagFor(row.pkg, version)}\``} |`,
     );
   }
   return out;
@@ -324,14 +332,14 @@ function code(value: string): string {
 }
 
 /**
- * verdict is the single line answering the question the comment exists for,
- * before any of the evidence.
+ * verdict is the line above the table, and there is one only when the table
+ * cannot answer on its own.
  *
- * When something releases it is the tags, and nothing else: naming the bump
- * size beside them restated two of the table's own columns, in a comment whose
- * whole point is that the reader compares those columns himself. Otherwise it
- * is "None", or "No version change" for a release this pull request rides
- * along on, with the one clause the table cannot carry — why.
+ * Why nothing releases — a hidden type, a file under no component — is
+ * nowhere in a row, so it gets the line. What *does* release is entirely in
+ * the row: the version, whether this pull request is what moves it, and the
+ * tag. A line repeating any of that is a caption on a photograph of itself,
+ * which is what "Cuts `v0.2.0` — minor bump." was.
  */
 function verdict(
   projection: Projection,
@@ -339,14 +347,8 @@ function verdict(
   moved: readonly MovedRow[],
   unmoved: readonly Row[],
   touchedPackages: readonly PackageConfig[],
-): string {
-  if (moved.length > 0) {
-    const tags = moved
-      .map((r) => `\`${tagFor(r.pkg, r.projected.version)}\``)
-      .join(", ");
-    const asked = forced(moved, projection);
-    return asked ? `${tags} — \`Release-As: ${asked}\` forces the version.` : tags;
-  }
+): string | undefined {
+  if (moved.length > 0) return undefined;
 
   const type = titleType(options.title) ?? "";
   if (unmoved.length > 0) {
@@ -508,26 +510,11 @@ function pendingCell(row: Row, options: RenderOptions): string {
   return url ? `[${row.pending.version}](${url})` : row.pending.version;
 }
 
-/**
- * forced reports a `Release-As:` note that produced one of these versions.
- *
- * The one thing about a bump that the table cannot show: every other reason a
- * version came out as it did is the commit type, which is in the title just
- * above.
- */
-function forced(
-  moved: readonly MovedRow[],
-  projection: Projection,
-): string | undefined {
-  const asked = projection.releaseAs;
-  if (!asked || projection.ignoredReleaseAs) return undefined;
-  return moved.some((r) => r.projected.version === asked) ? asked : undefined;
-}
-
 /** warn is the terse list of things that will surprise someone. */
 function warn(
   projection: Projection,
   options: RenderOptions,
+  moved: readonly MovedRow[],
   components: {
     unmatched: readonly string[];
     shared: ReadonlyMap<string, PackageConfig[]>;
@@ -535,6 +522,12 @@ function warn(
   },
 ): string[] {
   const warnings: string[] = [...(options.advisories ?? [])];
+  // Why a version came out as it did is otherwise the commit type, which is
+  // in the title just above. A note that overrode it is not.
+  const asked = projection.releaseAs;
+  if (asked && !projection.ignoredReleaseAs && moved.some((r) => r.projected.version === asked)) {
+    warnings.push(`- \`Release-As: ${asked}\` forces the version.`);
+  }
   // The row is shown from release-please's answer alone, so the reader is
   // told which parts of it this comment could not fill in.
   for (const component of [...new Set(components.unmatched)].sort()) {

@@ -62017,18 +62017,18 @@ function renderProjection(projection, options) {
   const unmoved = rows.filter(
     (r) => r.projected !== void 0 && r.projected.version === r.pending?.version && touched.has(r.pkg.releaseComponent)
   );
+  const said = verdict(projection, options, moved, unmoved, touchedPackages);
   const out = [
     "## Projected releases",
     "",
-    verdict(projection, options, moved, unmoved, touchedPackages),
-    "",
+    ...said ? [said, ""] : [],
     ...table(rows, options)
   ];
   const byComponent = groupBy(projection.packages, (p) => p.releaseComponent);
   const shared = new Set(
     [...byComponent].filter(([, list]) => list.length > 1).map(([c]) => c)
   );
-  const warnings = warn(projection, options, {
+  const warnings = warn(projection, options, moved, {
     unmatched,
     shared: byComponent,
     // Only where a release actually had to be attributed. Every package has
@@ -62086,12 +62086,13 @@ function buildRows(projection) {
 }
 function table(rows, options) {
   const out = [
-    "| Component | Path | Files | Current | Without this PR | Projected |",
-    "| --- | --- | --- | --- | --- | --- |"
+    "| Component | Path | Files | Current | Without this PR | Projected | Tag |",
+    "| --- | --- | --- | --- | --- | --- | --- |"
   ];
   for (const row of rows) {
+    const version = row.projected?.version;
     out.push(
-      `| ${code(row.pkg.component)} | ${code(row.pkg.path)} | ${row.files.length || "\u2014"} | ${row.pkg.current ?? "\u2014"} | ${pendingCell(row, options)} | ${projectedCell(row)} |`
+      `| ${code(row.pkg.component)} | ${code(row.pkg.path)} | ${row.files.length || "\u2014"} | ${row.pkg.current ?? "\u2014"} | ${pendingCell(row, options)} | ${projectedCell(row)} | ${version === void 0 ? "\u2014" : `\`${tagFor(row.pkg, version)}\``} |`
     );
   }
   return out;
@@ -62105,11 +62106,7 @@ function code(value) {
   return value ? `\`${value}\`` : "\u2014";
 }
 function verdict(projection, options, moved, unmoved, touchedPackages) {
-  if (moved.length > 0) {
-    const tags = moved.map((r) => `\`${tagFor(r.pkg, r.projected.version)}\``).join(", ");
-    const asked = forced(moved, projection);
-    return asked ? `${tags} \u2014 \`Release-As: ${asked}\` forces the version.` : tags;
-  }
+  if (moved.length > 0) return void 0;
   const type = titleType(options.title) ?? "";
   if (unmoved.length > 0) {
     return visibleTitle(options) ? `No version change \u2014 \`${type}\` adds only a changelog line.` : `No version change \u2014 \`${type}\` is a hidden type.`;
@@ -62176,13 +62173,12 @@ function pendingCell(row, options) {
   const url = releasePrUrl(row.pkg.component, options);
   return url ? `[${row.pending.version}](${url})` : row.pending.version;
 }
-function forced(moved, projection) {
-  const asked = projection.releaseAs;
-  if (!asked || projection.ignoredReleaseAs) return void 0;
-  return moved.some((r) => r.projected.version === asked) ? asked : void 0;
-}
-function warn(projection, options, components) {
+function warn(projection, options, moved, components) {
   const warnings = [...options.advisories ?? []];
+  const asked = projection.releaseAs;
+  if (asked && !projection.ignoredReleaseAs && moved.some((r) => r.projected.version === asked)) {
+    warnings.push(`- \`Release-As: ${asked}\` forces the version.`);
+  }
   for (const component of [...new Set(components.unmatched)].sort()) {
     warnings.push(
       `- release-please releases ${component ? `\`${component}\`` : "a component this comment cannot name"}, which matches no configured package here. The row's **Current** and matched files are unknown, and its tag is this comment's reading rather than a configured one.`

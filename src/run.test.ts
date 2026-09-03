@@ -78,8 +78,9 @@ async function comment(
 describe("buildComment", () => {
   it("renders the tag a feature would cut", async () => {
     const out = await comment("feat: a thing");
-    expect(out).toContain("\n`acme-api@v2.5.0`\n");
-    expect(out).toContain("| `acme-api` | `api` | 1 | 2.4.1 |");
+    expect(out).toContain(
+      "| `acme-api` | `api` | 1 | 2.4.1 | — | **2.5.0** | `acme-api@v2.5.0` |",
+    );
     expect(out).toContain("Changelog preview");
   });
 
