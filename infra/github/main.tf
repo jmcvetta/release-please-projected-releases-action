@@ -1,9 +1,8 @@
 # GitHub configuration for the release-please-projected-releases-action
 # repository.
 #
-# Most of what is here already exists on the repository and was imported; the
-# two exceptions are called out in their own comments. See README.md for the
-# import procedure and for the rule governing what may be added to this stack.
+# See README.md for how to run it, and for the rule governing what may be added
+# to this stack.
 
 # The repository itself.
 #
@@ -94,11 +93,8 @@ resource "github_workflow_repository_permissions" "projected_releases" {
 # classic branch protection. The distinction matters: classic protection cannot
 # express allowed_merge_methods, which is the squash-only invariant above.
 #
-# This is the one resource the stack created rather than adopted: there was no
-# ruleset on the repository before it, so CLAUDE.md's "never push to master"
-# was a rule with no mechanism behind it. Creating one was the safe direction
-# -- nothing to destroy first, and so no window in which master was less
-# protected than it had been.
+# There was no ruleset on the repository before this stack, so CLAUDE.md's
+# "never push to master" was a rule with no mechanism behind it.
 resource "github_repository_ruleset" "master" {
   name        = "master"
   repository  = github_repository.projected_releases.name

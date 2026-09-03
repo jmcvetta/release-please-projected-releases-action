@@ -29,10 +29,6 @@ A clean checkout plans as **`No changes.`** Anything else means either someone
 changed a setting in the web UI, or a change here has not been applied yet —
 the plan output tells you which.
 
-`imports.tf` adopts every resource here by id, so an apply against empty state
-rebuilds the stack rather than trying to create a repository that is already
-there.
-
 ### The provider lock has to be what init produces
 
 `.terraform.lock.hcl` is committed, and CI fails if `tofu init` would change
