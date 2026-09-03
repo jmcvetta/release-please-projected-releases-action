@@ -1,3 +1,13 @@
 node_modules/
 coverage/
 projected-releases.md
+
+# OpenTofu working directory (provider binaries, ~40MB) and crash logs.
+# infra/github/terraform.tfstate IS committed on purpose -- see
+# infra/github/README.md for why that is safe and what keeps it safe.
+infra/**/.terraform/
+crash.log
+*.tfplan
+# The rotating state backup adds churn with no value: git history already
+# preserves every prior version of the state itself.
+*.tfstate.backup
