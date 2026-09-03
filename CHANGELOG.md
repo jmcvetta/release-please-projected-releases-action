@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/jmcvetta/release-please-projected-releases-action/compare/v0.1.0...v0.2.0) (2026-09-03)
+
+
+### Features
+
+* show the projected versions and tags in one uncollapsed table ([#15](https://github.com/jmcvetta/release-please-projected-releases-action/issues/15)) ([d5d9e1e](https://github.com/jmcvetta/release-please-projected-releases-action/commit/d5d9e1efdf7ab9a05fdbfcb0425e0781dcca6492))
+
+
+### Bug Fixes
+
+* say what release-please says, and show only what a row cannot ([#17](https://github.com/jmcvetta/release-please-projected-releases-action/issues/17)) ([ddd5533](https://github.com/jmcvetta/release-please-projected-releases-action/commit/ddd5533f3a506b0e432ff697816740de2c579b25))
+
 ## 0.1.0 (2026-09-03)
 
 
