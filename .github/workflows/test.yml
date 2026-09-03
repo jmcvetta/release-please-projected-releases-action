@@ -156,3 +156,16 @@ jobs:
             exit 1
           fi
       - run: npm run check:infra
+      # `tofu init` records a hash per platform it has installed the provider
+      # on, so a lock file written from one machine is silently rewritten on
+      # the next. Left alone that means every init offers a diff nobody meant
+      # to make, and the pin stops being reviewable. The lock here is generated
+      # for both platforms at once (README.md says how), and this step is what
+      # notices when it no longer covers one.
+      - name: Fail if the committed provider lock is not what init produces
+        run: |
+          if ! git diff --quiet -- infra/github/.terraform.lock.hcl; then
+            echo "::error::infra/github/.terraform.lock.hcl is stale. See the diff below." >&2
+            git diff -- infra/github/.terraform.lock.hcl >&2
+            exit 1
+          fi
