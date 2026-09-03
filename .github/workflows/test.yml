@@ -32,8 +32,8 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -78,13 +78,13 @@ jobs:
       # by design and the write below would fail the check over something the
       # contributor cannot fix. The coverage report is still in the log above.
       #
-      # MIT-licensed, and pinned by commit SHA (v2.9.3) rather than by tag: a
+      # MIT-licensed, and pinned by commit SHA (v2.13.0) rather than by tag: a
       # tag can be moved onto different code, a SHA cannot.
       - name: Comment the coverage this change leaves
         if: >-
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository
-        uses: davelosert/vitest-coverage-report-action@2500dafcee7dd64f85ab689c0b83798a8359770e # v2.9.3
+        uses: davelosert/vitest-coverage-report-action@c4bbc33a89b7ace0e63d35f1f7d4bcee31155a73 # v2.13.0
         with:
           name: coverage
 

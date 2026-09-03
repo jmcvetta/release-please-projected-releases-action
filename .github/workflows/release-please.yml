@@ -72,7 +72,7 @@ jobs:
       # release for `uses: ...@v0` to mean anything. release-please writes
       # only the exact tag. The aliases below are computed from the release,
       # so this keeps working across the 1.0.0 that retires `v0`.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: steps.release.outputs.release_created == 'true'
         with:
           fetch-depth: 0

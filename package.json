@@ -29,11 +29,11 @@
   "homepage": "https://github.com/jmcvetta/release-please-projected-releases-action#readme",
   "private": true,
   "devDependencies": {
-    "@types/node": "^26.2.0",
-    "@vitest/coverage-v8": "^4.1.10",
-    "esbuild": "^0.27.7",
+    "@types/node": "^26.4.1",
+    "@vitest/coverage-v8": "^5.0.0",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10",
+    "vitest": "^5.0.0",
     "yaml": "^2.9.0"
   }
 }

@@ -76,7 +76,7 @@ jobs:
             exit 1
           }
           echo "number=$number" >> "$GITHUB_OUTPUT"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: projected-releases
           run-id: ${{ github.event.workflow_run.id }}

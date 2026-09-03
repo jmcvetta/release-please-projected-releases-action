@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ !startsWith(github.event.pull_request.head.ref, 'release-please--') }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: jmcvetta/release-please-projected-releases-action@v0
@@ -35,7 +35,7 @@ jobs:
       # file as the pull request writes it, so anything this job uploads is
       # the head's to choose, and the posting job resolves the number from the
       # API instead. See examples/fork-safe-comment.yml.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: projected-releases
           path: projected-releases.md
