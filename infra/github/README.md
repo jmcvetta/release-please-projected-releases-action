@@ -30,6 +30,24 @@ as **`No changes.`** Anything else means either someone changed a setting in
 the web UI, or a change here has not been applied yet — the plan output tells
 you which.
 
+### The provider lock has to be what init produces
+
+`.terraform.lock.hcl` is committed, and CI fails if `tofu init` would change
+it. That is stricter than it sounds: initialising against the registry records
+an `h1:` hash for every platform the provider publishes, so a lock file
+carrying fewer of them is rewritten on the next init, on any machine. A file
+that init rewrites is not a pin anyone reads — the diff appears, nobody asked
+for it, and it gets committed unread.
+
+So when the provider version changes, let init write the file and commit what
+it wrote:
+
+```sh
+cd infra/github
+tofu init -backend=false
+git diff -- .terraform.lock.hcl
+```
+
 ## Checking a change before applying it
 
 `tofu apply` is the first thing that parses these files, and it runs against

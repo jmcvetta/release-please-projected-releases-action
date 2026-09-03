@@ -156,12 +156,13 @@ jobs:
             exit 1
           fi
       - run: npm run check:infra
-      # `tofu init` records a hash per platform it has installed the provider
-      # on, so a lock file written from one machine is silently rewritten on
-      # the next. Left alone that means every init offers a diff nobody meant
-      # to make, and the pin stops being reviewable. The lock here is generated
-      # for both platforms at once (README.md says how), and this step is what
-      # notices when it no longer covers one.
+      # A lock file that init would rewrite is not a pin anyone is reading:
+      # every init offers a diff nobody meant to make, and the habit is to
+      # commit it unread. Measured on this repository: initialising against the
+      # registry records an `h1:` hash for every platform the provider
+      # publishes, so a lock carrying one platform's hash is rewritten on the
+      # next init. This step fails on that and prints the diff, which is the
+      # fix.
       - name: Fail if the committed provider lock is not what init produces
         run: |
           if ! git diff --quiet -- infra/github/.terraform.lock.hcl; then
