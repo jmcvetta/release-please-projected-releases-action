@@ -62086,6 +62086,9 @@ function buildRows(projection) {
 }
 function table(rows, options) {
   const showPath = new Set(rows.map((r) => r.pkg.path)).size > 1;
+  const showTag = rows.some(
+    (r) => r.projected !== void 0 && tagFor(r.pkg, r.projected.version) !== `v${r.projected.version}`
+  );
   const columns = [
     "Package",
     ...showPath ? ["Path"] : [],
@@ -62093,7 +62096,7 @@ function table(rows, options) {
     "Current",
     "Without this PR",
     "Projected",
-    "Tag"
+    ...showTag ? ["Tag"] : []
   ];
   const out = [
     `| ${columns.join(" | ")} |`,
@@ -62108,7 +62111,7 @@ function table(rows, options) {
       row.pkg.current ?? "\u2014",
       pendingCell(row, options),
       projectedCell(row),
-      version === void 0 ? "\u2014" : `\`${tagFor(row.pkg, version)}\``
+      ...showTag ? [version === void 0 ? "\u2014" : `\`${tagFor(row.pkg, version)}\``] : []
     ];
     out.push(`| ${cells.join(" | ")} |`);
   }

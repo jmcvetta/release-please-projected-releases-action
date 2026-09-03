@@ -85,8 +85,9 @@ async function project(title: string, extra: string[] = []): Promise<string> {
 describe("the committed bundle, run against a fake GitHub", () => {
   it("renders a projection, changelog and all", async () => {
     const out = await project("feat: a thing");
-    // The version and tag come from release-please, through the bundle.
-    expect(out).toContain("v1.0.0");
+    // The version comes from release-please, through the bundle. Its tag is
+    // `v` and the version, so the column that would repeat it is dropped.
+    expect(out).toContain("| **1.0.0** |");
     // And the changelog, which is the part that needs the Handlebars
     // templates to have shipped beside the bundle.
     expect(out).toContain("Changelog preview");

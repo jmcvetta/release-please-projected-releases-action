@@ -29,11 +29,14 @@ if that matters to you.
 
 The table is the whole answer, so it is never collapsed and every package
 gets a row — including the ones that did not move, which is what makes the
-comparison a comparison. **Tag** is the only cell that is not arithmetic on
-the others: `include-component-in-tag` and `tag-separator` decide it, and a
-reader cannot spell it from the component name and the version. **Path**
-appears only where the rows disagree on it, so a single-package repository —
-which every plain-mode one is — does not carry a column of `.`.
+comparison a comparison.
+
+Two columns appear only when they say something the others do not. **Tag**
+is there when a tag carries its package's component, which
+`include-component-in-tag` and `tag-separator` decide and nothing else in the
+row predicts; without one a tag is `v` and the version, so the column would
+repeat **Projected** on every line. **Path** is there when the rows disagree
+on it, so a single-package repository does not carry a column of `.`.
 
 A line appears above the table only when no row can answer — `None — \`docs\`
 is a hidden type.` A merge that does release gets no line, because the row

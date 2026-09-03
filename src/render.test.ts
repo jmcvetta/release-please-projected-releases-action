@@ -129,8 +129,33 @@ describe("the table", () => {
   it("keeps Path when the rows disagree on it", () => {
     const out = body(projection());
     expect(out).toContain(
-      "| Package | Path | Files | Current | Without this PR | Projected | Tag |",
+      "| Package | Path | Files | Current | Without this PR | Projected |",
     );
+  });
+
+  // Without a component a tag is `v` prefixed to Projected, so the column
+  // would repeat the one beside it on every row. Kept where a component
+  // makes it unpredictable, which is the case the action exists for.
+  it("keeps Tag where a tag carries a component", () => {
+    const out = body(
+      projection({
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
+    );
+    expect(out).toContain("| Projected | Tag |");
+    expect(out).toContain("`acme-api@v2.5.0`");
+  });
+
+  it("drops Tag when no tag carries a component", () => {
+    const out = body(
+      projection({
+        packages: [{ ...API, includeComponent: false }],
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
+    );
+    expect(out).not.toContain("| Tag |");
+    expect(out).not.toContain("`v2.5.0`");
+    expect(out).toContain("| **2.5.0** |");
   });
 
   it("counts the files each package claimed", () => {
@@ -235,7 +260,7 @@ describe("saying that nothing releases", () => {
     expect(out).toContain("no changed file is under a package path");
     expect(out).toContain("`job-descriptions`");
     expect(out).toContain("`pipeline.json`");
-    expect(out).toContain("| `acme-api` | `api` | — | 2.4.1 | — | — | — |");
+    expect(out).toContain("| `acme-api` | `api` | — | 2.4.1 | — | — |");
   });
 
   it("blames the type when a package is touched but nothing releases", () => {
@@ -484,10 +509,10 @@ describe("two packages under one component name", () => {
   it("gives each release a package of its own", () => {
     const out = body(both);
     expect(out).toContain(
-      "| `acme-api` | `api` | 1 | 2.4.1 | — | **2.5.0** | `v2.5.0` |",
+      "| `acme-api` | `api` | 1 | 2.4.1 | — | **2.5.0** |",
     );
     expect(out).toContain(
-      "| `acme-ui` | `ui` | 1 | 1.0.0 | — | **1.1.0** | `v1.1.0` |",
+      "| `acme-ui` | `ui` | 1 | 1.0.0 | — | **1.1.0** |",
     );
   });
 
@@ -549,13 +574,17 @@ describe("a release whose component matches no configured package", () => {
     expect(out).toContain("| `ghost` | — | — | — | — | **3.1.0** | `ghost@v3.1.0` |");
   });
 
-  it("spells an unnamed release's tag without a component", () => {
+  // Its tag is `v` and the version, which is what Projected already says, so
+  // the column goes -- the row that matters here is the one that exists at
+  // all. `tagFor` spelling an unnamed release is covered above.
+  it("keeps an unnamed release's row without a tag column", () => {
     const out = body(
       projection({ packages: [], touched: new Map(), projected: [
         { component: "", version: "1.0.0", notes: "" },
       ] }),
     );
-    expect(out).toContain("| **1.0.0** | `v1.0.0` |");
+    expect(out).toContain("| **1.0.0** |");
+    expect(out).not.toContain("| Tag |");
     expect(out).toContain("a package this comment cannot name");
   });
 });

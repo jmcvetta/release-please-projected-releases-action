@@ -283,11 +283,13 @@ function buildRows(projection: Projection): {
  * numbers rather than a sentence describing the difference between two of
  * them.
  *
- * **Tag** is the only cell that is not arithmetic on the others, and it is
- * the one this action exists to show: the component name and the version do
- * not spell it. `include-component-in-tag` and `tag-separator` do, and
- * neither is anywhere else in the comment — this repository's own component
- * is `release-please-projected-releases-action` and its tag is `v0.2.0`.
+ * **Tag** appears only where a tag carries its package's component, which is
+ * the case this action exists to show: `include-component-in-tag` and
+ * `tag-separator` decide the spelling, neither is anywhere else in the
+ * comment, and nothing in **Package** or **Projected** predicts it. Without a
+ * component a tag is `v` prefixed to **Projected** and nothing else, so the
+ * column would repeat the one beside it for every row — release-please's own
+ * spelling, which a reader of this comment knows.
  *
  * **Path** appears only where the rows do not share one. It answers "which of
  * these packages claimed the file", a question a single-package repository
@@ -303,6 +305,14 @@ function buildRows(projection: Projection): {
  */
 function table(rows: readonly Row[], options: RenderOptions): string[] {
   const showPath = new Set(rows.map((r) => r.pkg.path)).size > 1;
+  // Asked of the tags actually rendered, not of the configuration: a package
+  // that would tag with its component but has no projected release spells no
+  // tag in this table, and a column of em dashes says nothing at all.
+  const showTag = rows.some(
+    (r) =>
+      r.projected !== undefined &&
+      tagFor(r.pkg, r.projected.version) !== `v${r.projected.version}`,
+  );
   const columns = [
     "Package",
     ...(showPath ? ["Path"] : []),
@@ -310,7 +320,7 @@ function table(rows: readonly Row[], options: RenderOptions): string[] {
     "Current",
     "Without this PR",
     "Projected",
-    "Tag",
+    ...(showTag ? ["Tag"] : []),
   ];
   const out = [
     `| ${columns.join(" | ")} |`,
@@ -325,7 +335,9 @@ function table(rows: readonly Row[], options: RenderOptions): string[] {
       row.pkg.current ?? "—",
       pendingCell(row, options),
       projectedCell(row),
-      version === undefined ? "—" : `\`${tagFor(row.pkg, version)}\``,
+      ...(showTag
+        ? [version === undefined ? "—" : `\`${tagFor(row.pkg, version)}\``]
+        : []),
     ];
     out.push(`| ${cells.join(" | ")} |`);
   }

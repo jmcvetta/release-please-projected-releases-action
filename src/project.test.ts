@@ -665,7 +665,7 @@ describe("a repository release-please runs without a manifest", () => {
     expect(p.projected[0]!.component).toBe("");
     expect(p.packages[0]!.releaseComponent).toBe("");
     expect(render(p, { title: "feat: a thing", malformed: false })).toContain(
-      "`v2.5.0`",
+      "| **2.5.0** |",
     );
   });
 
@@ -793,7 +793,7 @@ describe("a package that keeps its component out of its tags", () => {
 
   it("keeps the row, rather than reporting none", async () => {
     const out = render(await bare(), { title: "feat: a thing", malformed: false });
-    expect(out).toContain("`v2.5.0`");
+    expect(out).toContain("| **2.5.0** |");
     expect(out).not.toContain("None —");
   });
 });
