@@ -14,7 +14,7 @@
 # subjects on master and break version selection silently -- silently, because
 # a release pull request would still open, just with the wrong number on it.
 resource "github_repository" "projected_releases" {
-  name        = "release-please-projected-releases-action"
+  name = "release-please-projected-releases-action"
   # Both modes: the action reads release-please-config.json when there is one
   # and takes `release-type:` config directly when there is not. This
   # repository itself releases in the second one.
