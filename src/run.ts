@@ -15,7 +15,13 @@ import type { GitHub as GitHubType } from "release-please";
 import { watchBoundaries } from "./boundary.js";
 import { isMalformed, resolveTypes } from "./conventional.js";
 import type { TypeSet } from "./conventional.js";
-import { project, DEFAULT_CONFIG_FILE, DEFAULT_MANIFEST_FILE } from "./project.js";
+import { commitFileIndex } from "./git.js";
+import {
+  project,
+  COMMIT_SEARCH_DEPTH,
+  DEFAULT_CONFIG_FILE,
+  DEFAULT_MANIFEST_FILE,
+} from "./project.js";
 import type { PlainConfig, Projection } from "./project.js";
 import { render } from "./render.js";
 
@@ -56,6 +62,12 @@ export interface RunOptions {
   files: string[];
   /** repoRoot is the checkout the config and manifest are read from. */
   repoRoot?: string;
+  /**
+   * baseRef is the target branch as the checkout names it, which is where the
+   * commit-file index is read from. Defaults to `origin/<base>`, the same ref
+   * the changed-file diff runs against.
+   */
+  baseRef?: string;
   /**
    * plain selects release-please's non-manifest mode: one package configured
    * here rather than by a release-please-config.json in the checkout. Nothing
@@ -229,10 +241,19 @@ async function projectPullRequest(
       : {}),
     }));
 
+  // The checkout's answer to "what did this commit change", when it has one.
+  // Missing shas and a checkout that cannot answer both fall through to
+  // release-please's own backfill, one REST call at a time.
+  const index = commitFileIndex(
+    [options.baseRef ?? `origin/${options.base}`, options.base, "HEAD"],
+    COMMIT_SEARCH_DEPTH,
+  );
+
   return project({
     github,
     config,
     manifest,
+    ...(index ? { commitFiles: (sha: string) => index.get(sha) } : {}),
     configFile: files.configFile,
     manifestFile: files.manifestFile,
     releaseBranchPrefix: files.releaseBranchPrefix,

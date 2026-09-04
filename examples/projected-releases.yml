@@ -41,9 +41,10 @@ jobs:
       # The sticky comment, and nothing else.
       pull-requests: write
     steps:
-      # Full history, so the changed-file diff can run from the merge base. A
-      # shallow clone does not have that commit; the action falls back to the
-      # API, which is capped at 3000 files.
+      # Full history, and it pays for itself twice: the changed-file diff runs
+      # from the merge base, and the file list of each commit release-please
+      # walks is read locally rather than one API request at a time. A shallow
+      # clone has neither, and the action falls back to the API for both.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0

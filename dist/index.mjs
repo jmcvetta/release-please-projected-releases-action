@@ -6315,7 +6315,7 @@ var require_utils2 = __commonJS({
     "use strict";
     exports2.__esModule = true;
     exports2.extend = extend;
-    exports2.indexOf = indexOf;
+    exports2.indexOf = indexOf2;
     exports2.escapeExpression = escapeExpression;
     exports2.isEmpty = isEmpty;
     exports2.createFrame = createFrame;
@@ -6360,7 +6360,7 @@ var require_utils2 = __commonJS({
       return value && typeof value === "object" ? toString.call(value) === "[object Array]" : false;
     };
     exports2.isArray = isArray;
-    function indexOf(array, value) {
+    function indexOf2(array, value) {
       for (var i = 0, len = array.length; i < len; i++) {
         if (array[i] === value) {
           return i;
@@ -61526,6 +61526,51 @@ function changedFiles(base, head, run = gitRunner) {
   const mergeBase = run(["merge-base", base, head]).trim();
   return run(["diff", "--name-only", mergeBase, head]).split("\n").map((line) => line.trim()).filter(Boolean);
 }
+function commitFileIndex(refs, depth, run = gitRunner) {
+  try {
+    if (run(["rev-parse", "--is-shallow-repository"]).trim() === "true") {
+      return void 0;
+    }
+  } catch {
+    return void 0;
+  }
+  for (const ref of refs) {
+    const index = indexOf(ref, depth, run);
+    if (index && index.size > 0) return index;
+  }
+  return void 0;
+}
+function indexOf(ref, depth, run) {
+  let out;
+  try {
+    out = run([
+      "-c",
+      "core.quotePath=false",
+      "log",
+      `--max-count=${depth}`,
+      "--name-only",
+      "--diff-merges=first-parent",
+      "--pretty=format:%x00%H",
+      ref
+    ]);
+  } catch {
+    return void 0;
+  }
+  const index = /* @__PURE__ */ new Map();
+  let files;
+  for (const line of out.split("\n")) {
+    if (line.startsWith("\0")) {
+      files = [];
+      index.set(line.slice(1).trim(), files);
+      continue;
+    }
+    const path = line.trim();
+    if (!path || !files) continue;
+    if (path.startsWith('"')) return void 0;
+    files.push(path);
+  }
+  return index;
+}
 
 // src/merge-method.ts
 var MERGE_METHODS = [
@@ -61610,6 +61655,70 @@ function drainBoundaries() {
   const found = seen;
   seen = [];
   return found;
+}
+
+// src/commits.ts
+function commitSource(github, options = {}) {
+  if (typeof github.mergeCommitIterator !== "function") return github;
+  const source = Object.create(github);
+  const serve = options.files;
+  if (serve) {
+    source.getCommitFiles = async function(sha) {
+      return serve(sha) ?? await github.getCommitFiles(sha);
+    };
+  }
+  let asked;
+  const walked = [];
+  let upstream;
+  let exhausted = false;
+  let queue = Promise.resolve();
+  const at = (n) => {
+    const pull = queue.then(async () => {
+      if (n < walked.length) return walked[n];
+      if (exhausted || !upstream) return void 0;
+      const next = await upstream.next();
+      if (next.done) {
+        exhausted = true;
+        return void 0;
+      }
+      walked.push(next.value);
+      return next.value;
+    });
+    queue = pull.then(
+      () => void 0,
+      () => void 0
+    );
+    return pull;
+  };
+  source.mergeCommitIterator = async function* (targetBranch, iteratorOptions) {
+    const question = JSON.stringify([
+      targetBranch,
+      iteratorOptions?.maxResults ?? null,
+      iteratorOptions?.backfillFiles ?? null,
+      iteratorOptions?.batchSize ?? null
+    ]);
+    if (asked === void 0) {
+      asked = question;
+      upstream = github.mergeCommitIterator.call(
+        source,
+        targetBranch,
+        iteratorOptions
+      );
+    } else if (question !== asked) {
+      yield* github.mergeCommitIterator.call(
+        source,
+        targetBranch,
+        iteratorOptions
+      );
+      return;
+    }
+    for (let n = 0; ; n++) {
+      const commit = await at(n);
+      if (!commit) return;
+      yield commit;
+    }
+  };
+  return source;
 }
 
 // src/conventional.ts
@@ -61803,6 +61912,8 @@ ${commit.body.trim()}` : commit.title;
 // src/project.ts
 var DEFAULT_CONFIG_FILE = "release-please-config.json";
 var DEFAULT_MANIFEST_FILE = ".release-please-manifest.json";
+var COMMIT_SEARCH_DEPTH = 500;
+var COMMIT_BATCH_SIZE = 100;
 function tagFor(pkg, version) {
   if (!pkg.includeComponent || !pkg.component) return `v${version}`;
   return `${pkg.component}${pkg.separator}v${version}`;
@@ -61936,20 +62047,30 @@ async function project(options) {
     [configFile]: options.config,
     [manifestFile]: options.manifest
   };
+  const tuned = plain ? {} : options.config;
+  const manifestOptions = {
+    ...tuned["commit-search-depth"] === void 0 ? { commitSearchDepth: COMMIT_SEARCH_DEPTH } : {},
+    ...tuned["commit-batch-size"] === void 0 ? { commitBatchSize: COMMIT_BATCH_SIZE } : {}
+  };
   const build = (github) => plain ? import_release_please2.Manifest.fromConfig(
     github,
     options.commit.baseBranch,
     plain,
-    {},
+    manifestOptions,
     plain.path ?? ROOT_PACKAGE_PATH
   ) : import_release_please2.Manifest.fromManifest(
     github,
     options.commit.baseBranch,
     configFile,
-    manifestFile
+    manifestFile,
+    manifestOptions
+  );
+  const source = commitSource(
+    options.github,
+    options.commitFiles ? { files: options.commitFiles } : {}
   );
   const view = viewWithPullRequest(
-    options.github,
+    source,
     options.commit,
     overrides,
     options.readHeadFile
@@ -61968,7 +62089,7 @@ async function project(options) {
   let pending = [];
   let unresolvedBase = [];
   try {
-    const withoutPr = await build(options.github);
+    const withoutPr = await build(source);
     pending = toReleases(await withoutPr.buildPullRequests(), prefix);
     unresolvedBase = drainBoundaries();
   } catch (error) {
@@ -62413,10 +62534,15 @@ async function projectPullRequest(options, config, manifest, files) {
     ...options.apiUrl ? { apiUrl: options.apiUrl } : {},
     ...options.graphqlUrl ? { graphqlUrl: graphqlRoot(options.graphqlUrl) } : {}
   });
+  const index = commitFileIndex(
+    [options.baseRef ?? `origin/${options.base}`, options.base, "HEAD"],
+    COMMIT_SEARCH_DEPTH
+  );
   return project({
     github,
     config,
     manifest,
+    ...index ? { commitFiles: (sha) => index.get(sha) } : {},
     configFile: files.configFile,
     manifestFile: files.manifestFile,
     releaseBranchPrefix: files.releaseBranchPrefix,
@@ -62577,6 +62703,9 @@ async function action(env = process.env) {
     headBranch,
     files,
     repoRoot: inputOr("repo-root", ".", env),
+    // The same ref the changed-file diff runs against, so one input decides
+    // where both local reads look.
+    baseRef: inputOr("diff-base", `origin/${base}`, env),
     ...plainConfig(env) ? { plain: plainConfig(env) } : {},
     configFile: inputOr("config-file", DEFAULT_CONFIG_FILE, env),
     manifestFile: inputOr("manifest-file", DEFAULT_MANIFEST_FILE, env),
@@ -62791,6 +62920,7 @@ async function cli(argv2) {
     headBranch: values["head-branch"],
     files: list(values.files) ?? changedFiles(values["diff-base"] || `origin/${base}`, values.head),
     repoRoot: values["repo-root"],
+    baseRef: values["diff-base"] || `origin/${base}`,
     configFile: values["config-file"],
     manifestFile: values["manifest-file"],
     releasePrs: values["release-prs"] ? loadReleasePrs(

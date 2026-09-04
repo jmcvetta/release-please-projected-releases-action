@@ -116,6 +116,9 @@ export async function action(env: Env = process.env): Promise<void> {
     headBranch,
     files,
     repoRoot: inputOr("repo-root", ".", env),
+    // The same ref the changed-file diff runs against, so one input decides
+    // where both local reads look.
+    baseRef: inputOr("diff-base", `origin/${base}`, env),
     ...(plainConfig(env) ? { plain: plainConfig(env)! } : {}),
     configFile: inputOr("config-file", DEFAULT_CONFIG_FILE, env),
     manifestFile: inputOr("manifest-file", DEFAULT_MANIFEST_FILE, env),

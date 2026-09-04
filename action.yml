@@ -75,8 +75,10 @@ inputs:
     default: HEAD
   diff-base:
     description: >-
-      Local git ref the changed-file diff runs against. Defaults to
-      `origin/<base>`; release-please wants a branch name, git wants a ref.
+      Local git ref the checkout is read through: the changed-file diff runs
+      against it, and the file list of each commit release-please walks is
+      indexed from it. Defaults to `origin/<base>`; release-please wants a
+      branch name, git wants a ref.
     required: false
     default: ""
 

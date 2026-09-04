@@ -121,6 +121,7 @@ export async function cli(argv: string[]): Promise<void> {
       list(values.files) ??
       changedFiles(values["diff-base"] || `origin/${base}`, values.head),
     repoRoot: values["repo-root"],
+    baseRef: values["diff-base"] || `origin/${base}`,
     configFile: values["config-file"],
     manifestFile: values["manifest-file"],
     releasePrs: values["release-prs"]

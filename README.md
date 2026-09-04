@@ -82,7 +82,9 @@ jobs:
 ```
 
 Keep `edited` in the trigger list: the projection comes from the title, so a
-title fixed after review has to re-render. `@v0` tracks the latest `0.x`, and
+title fixed after review has to re-render. Keep `fetch-depth: 0` too: the
+checkout answers what each commit changed, which the API otherwise answers one
+request per commit. `@v0` tracks the latest `0.x`, and
 [`examples/projected-releases.yml`](examples/projected-releases.yml) adds a
 `concurrency` group and skips release-please's own release pull requests.
 
