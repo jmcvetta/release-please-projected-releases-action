@@ -21,6 +21,29 @@ resource "github_repository" "projected_releases" {
   description = "Says on a pull request which release-please tags merging it will cut, in manifest or plain mode."
   visibility  = "public"
 
+  # Topics. GitHub's repository search and the sidebar of every related
+  # project are the two places someone stumbles onto a tool like this one
+  # without being sent, and both are driven by these. They are configuration
+  # in exactly the sense the rest of this file is -- a setting that decides
+  # who finds the project, kept in a diff rather than clicked once and
+  # forgotten -- so they live here.
+  #
+  # Chosen for what a searcher types, not for what the code is: someone
+  # looking for this has a release-please problem, and does not yet have a
+  # word for the thing that solves it.
+  topics = [
+    "changelog",
+    "conventional-commits",
+    "github-action",
+    "github-actions",
+    "monorepo",
+    "release-automation",
+    "release-please",
+    "semantic-versioning",
+    "semver",
+    "versioning",
+  ]
+
   # Merge strategy. Do not relax without reading the note above.
   allow_squash_merge          = true
   allow_merge_commit          = false
