@@ -1,0 +1,57 @@
+name: Bug report
+description: The projection is wrong, or the action failed.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The most useful thing you can attach is a link to the pull request
+        where it happened, if it is public.
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Which release-please mode?
+      description: >-
+        Manifest mode has a release-please-config.json and a
+        .release-please-manifest.json in the checkout. Plain mode has neither
+        and sets release-type: on the action instead.
+      options:
+        - Manifest mode
+        - Plain mode
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Action version
+      description: The ref you pinned, e.g. v0, v0.2 or v0.2.0.
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected instead
+      description: >-
+        The pull request title matters — it is what the projection is computed
+        from — so please include it verbatim.
+    validations:
+      required: true
+
+  - type: textarea
+    id: workflow
+    attributes:
+      label: The workflow step that invokes the action
+      render: yaml
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Run log or job summary, if you have one
+      render: text
+    validations:
+      required: false

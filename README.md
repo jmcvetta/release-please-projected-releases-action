@@ -1,5 +1,9 @@
 # projected-releases
 
+[![Test](https://github.com/jmcvetta/release-please-projected-releases-action/actions/workflows/test.yml/badge.svg)](https://github.com/jmcvetta/release-please-projected-releases-action/actions/workflows/test.yml)
+[![Release](https://img.shields.io/github/v/release/jmcvetta/release-please-projected-releases-action)](https://github.com/jmcvetta/release-please-projected-releases-action/releases)
+[![License](https://img.shields.io/github/license/jmcvetta/release-please-projected-releases-action)](LICENSE)
+
 A GitHub Action that says, on a pull request, which release-please tags
 merging it will cut — or that nothing is released, which is the common case
 and is stated as an answer rather than left as silence.
@@ -232,6 +236,8 @@ computed by different majors can disagree, so the pin is worth knowing about.
 
 Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has
 the build, the test layout, and how a change gets released.
+[SECURITY.md](SECURITY.md) has what counts as a vulnerability here and how to
+report one privately.
 [docs/DESIGN.md](docs/DESIGN.md) has how the projection is actually computed,
 what the action does *not* delegate to release-please, and the assertion that
 keeps a dependency bump from silently turning the answer into "nothing
