@@ -2,6 +2,13 @@
 
 Issues and pull requests are welcome.
 
+When reporting a bug, say which release-please mode you are in: manifest mode
+has a `release-please-config.json` and a `.release-please-manifest.json` in
+the checkout, plain mode has neither and sets `release-type:` on the action
+instead. The two fail differently, so it is the first thing a report needs.
+The pull request title matters for the same reason — it is what the
+projection is computed from — so quote it verbatim.
+
 [docs/DESIGN.md](docs/DESIGN.md) explains how the projection is computed and
 why it is built that way. This file is the mechanics: how to build it, how the
 tests are arranged, and how a change reaches a tag.
