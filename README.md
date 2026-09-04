@@ -93,12 +93,10 @@ of the list.
 
 ## Fork pull requests
 
-A fork's token is read-only, so the comment cannot be posted from that run —
-the action says so and leaves the projection in the job summary. To comment
-anyway, copy the `workflow_run` pair,
-[`fork-safe-render.yml`](examples/fork-safe-render.yml) +
-[`fork-safe-comment.yml`](examples/fork-safe-comment.yml). Deliberately not
-`pull_request_target`, which would run the head's code with a write token.
+On a pull request from a fork the action writes the projection to the job
+summary instead of commenting. To get the comment as well, copy the
+`workflow_run` pair [`fork-safe-render.yml`](examples/fork-safe-render.yml) +
+[`fork-safe-comment.yml`](examples/fork-safe-comment.yml).
 
 ## Command line
 
@@ -108,12 +106,6 @@ exists:
 ```
 node dist/index.mjs --title "feat: a thing" --repo owner/name --base main --out preview.md
 ```
-
-## Contributing
-
-Issues and pull requests welcome — [CONTRIBUTING.md](CONTRIBUTING.md) has the
-build and tests, [SECURITY.md](SECURITY.md) how to report a vulnerability
-privately.
 
 ## License
 
