@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/jmcvetta/release-please-projected-releases-action/compare/v0.2.0...v0.2.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* drop undesired references  ([#32](https://github.com/jmcvetta/release-please-projected-releases-action/issues/32)) ([e925fe8](https://github.com/jmcvetta/release-please-projected-releases-action/commit/e925fe8040c58222bb27c5222f5ed600ece8c2cb))
+
 ## [0.2.0](https://github.com/jmcvetta/release-please-projected-releases-action/compare/v0.1.0...v0.2.0) (2026-09-03)
 
 
