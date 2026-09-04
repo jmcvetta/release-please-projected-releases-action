@@ -77,10 +77,6 @@ packages the changed files belong to, and the Conventional Commit type in the
 wrong is quiet — a stray `feat!:` cuts a major version, noticed after the
 merge.
 
-Nothing existing answers it: release-please computes from commits already on
-the target branch ([googleapis/release-please#2316][2316] is open and p3), and
-generic next-version actions know nothing about manifests, components, or tags.
-
 ## Assumptions
 
 **Squash-merge**, which is the whole premise: a squashed pull request
@@ -197,5 +193,3 @@ version. It is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
 A PARTICULAR PURPOSE. See the [GNU General Public License](LICENSE) for more
 details.
-
-[2316]: https://github.com/googleapis/release-please/issues/2316
