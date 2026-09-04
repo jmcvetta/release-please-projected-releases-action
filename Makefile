@@ -12,7 +12,7 @@ SHELL := /bin/bash
 # git_sync: sync master with origin and delete local branches whose upstream
 # is gone. Branches checked out in a linked worktree (marked '+' by
 # `git branch -vv`) are reported as a warning rather than deleted — removal
-# needs an explicit `git worktree remove` (or the /clean_gone skill).
+# needs an explicit `git worktree remove`
 git_sync:
 	git checkout master
 	git pull
