@@ -80,7 +80,7 @@ title fixed after review has to re-render. `@v0` tracks the latest `0.x`, and
 ## Configuration
 
 None, if release-please has a manifest in the checkout. Without one, name the
-release type your release workflow uses:
+release type — the same one your release workflow sets:
 
 ```yaml
       - uses: jmcvetta/release-please-projected-releases-action@v0
@@ -88,7 +88,7 @@ release type your release workflow uses:
           release-type: node
 ```
 
-The remaining inputs and outputs are in [`action.yml`](action.yml).
+The remaining inputs and the outputs are in [`action.yml`](action.yml).
 
 ## Command line
 
