@@ -189,7 +189,7 @@ necessary and not sufficient: **the last thing to check is the merge box
 itself, which is editable.** Delete the `---------` block there, or move the
 trailer below it, before confirming the merge.
 
-## The title's type is checked, but the check is not required
+## The title's type is a required check
 
 `.github/workflows/pr-title-check.yml` runs
 `amannn/action-semantic-pull-request` over the title, and
@@ -209,14 +209,27 @@ compares `commit.type === 'feat'` literally and bumps a **patch**. A feature
 shipped as a patch release, no error anywhere. `wip:` matches nothing and
 simply releases nothing.
 
-**It is not a required check, and that is the ruleset's constraint rather
-than a judgement about this one.** `required_status_checks` is absent from
-the `master` ruleset entirely, because the release job authenticates with the
-default token and GitHub suppresses workflow events for everything that token
-pushes -- so nothing reports on the release pull request, and any required
-check would block the one merge that cuts a tag. Configuring
-`RELEASE_BOT_APP_ID` + `RELEASE_BOT_PRIVATE_KEY` is what makes requiring it
-possible; until then the check is advisory and a red one has to be *read*.
+**`validate-title` is required by the `master` ruleset**, which is the whole
+point: advisory, the only place that failure shows is a red check nobody is
+obliged to read. The required context is a check-run **name** -- for an
+Actions job, its `name:` when it declares one and its job id otherwise -- so
+`infra/github/main.tf` and the workflow hold one pair in two languages, and
+renaming either alone leaves a required check nothing ever reports: pending
+forever, blocking every pull request, fixable only by someone applying the
+stack by hand. `src/pr-title-check.test.ts` pins that pair too, from both
+ends.
+
+**The cost lands on the release pull request, and it is real.** GitHub
+suppresses workflow events for everything the default token pushes, and
+`release-please.yml` falls back to that token while the App variables are
+unset, so the release pull request gets **no** check runs at all -- measured
+on #42, which has zero. `validate-title` therefore sits "expected" on the one
+pull request whose merge cuts a tag, and merging it takes the admin bypass
+the ruleset declares (`bypass_mode = "pull_request"`, so it is a click in the
+merge box, recorded). Configuring `RELEASE_BOT_APP_ID` +
+`RELEASE_BOT_PRIVATE_KEY` removes the click; `test` stays unrequired until
+then, since requiring it buys nothing on a pull request already being
+bypassed.
 
 ## The release job needs permission to open a pull request
 

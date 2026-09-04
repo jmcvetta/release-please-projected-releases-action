@@ -150,13 +150,6 @@ resource "github_repository_ruleset" "master" {
 
     # Solo repository, so no approvals are required; the rule exists to force
     # changes through a pull request at all, and to pin the merge method.
-    #
-    # required_status_checks is deliberately absent, and README.md says when to
-    # add it: while the release job authenticates with the default token,
-    # GitHub suppresses the workflow events for everything it pushes, so `test`
-    # never reports on the release pull request. Requiring it today would leave
-    # the one pull request that must merge waiting forever on a check that
-    # cannot run.
     pull_request {
       required_approving_review_count   = 0
       dismiss_stale_reviews_on_push     = false
@@ -164,6 +157,42 @@ resource "github_repository_ruleset" "master" {
       require_last_push_approval        = false
       required_review_thread_resolution = false
       allowed_merge_methods             = ["squash"]
+    }
+
+    # The pull request title has to parse as a Conventional Commit before it
+    # can merge. Squash-only merging with a PR_TITLE subject means that title
+    # *is* the master commit subject release-please parses, so the type in it
+    # decides whether a merge cuts a tag and how far the version moves. A
+    # miscased type is the case worth requiring a check over: `Feat:` renders
+    # a correct-looking Features entry and bumps a patch, with no error
+    # anywhere. Advisory was not enough, because the only place that failure
+    # shows up is a red check nobody is obliged to read.
+    #
+    # `validate-title` is a check-run name, not a workflow name: for an
+    # Actions job it is the job's `name:` when it has one and its job id
+    # otherwise, and pr-title-check.yml's job carries no `name:`. So this
+    # string and that job id are one pair spanning two files in two
+    # languages, and renaming either alone leaves a required check nothing
+    # ever reports -- pending forever, blocking every pull request, fixable
+    # only by someone applying this stack by hand. src/pr-title-check.test.ts
+    # pins the two together.
+    #
+    # KNOWN COST, until the release job authenticates as a GitHub App: the
+    # release pull request receives no checks at all. GitHub suppresses
+    # workflow events for everything the default token pushes, and
+    # release-please.yml falls back to that token while RELEASE_BOT_APP_ID
+    # and RELEASE_BOT_PRIVATE_KEY are unset -- measured on #42, which has
+    # zero check runs. So this check sits "expected" on the one pull request
+    # whose merge cuts a tag, and merging it takes the admin bypass declared
+    # above. Setting up the App removes the bypass step and is the real fix;
+    # `test` stays unrequired for the same reason until then.
+    required_status_checks {
+      strict_required_status_checks_policy = false
+      do_not_enforce_on_create             = false
+
+      required_check {
+        context = "validate-title"
+      }
     }
   }
 }
