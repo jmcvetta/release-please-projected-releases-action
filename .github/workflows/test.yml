@@ -60,7 +60,7 @@ jobs:
       # rather than the source this pull request changed.
       - name: Rebuild the bundle
         run: npm run build
-      - name: Fail if the committed bundle is not the source
+      - name: Bundle staleness check
         run: |
           if ! git diff --quiet -- dist; then
             echo "::error::dist/index.mjs is stale. Run \`npm run build\` and commit it." >&2
