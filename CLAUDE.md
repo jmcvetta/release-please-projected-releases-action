@@ -300,27 +300,25 @@ and `infra` stayed out of the required set. Requiring it later means dropping
 the filter in the same commit, and `src/pr-title-check.test.ts` fails on the
 combination rather than letting a blocked pull request report it.
 
-**`test.yml` carries the mirror-image filter, and the interesting part is what
-it does not exclude.** A pull request that only moves the OpenTofu state has
-nothing to say to a suite that never opens it, so `paths-ignore:` lists the
-files under `infra/` no test reads. `infra/github/main.tf` is not among them:
-`src/pr-title-check.test.ts` reads the master ruleset out of it, which makes
-the stack a real input to the suite that guards it. Ignoring the directory
-wholesale would switch that test off for exactly the pull request that renames
-a required context -- the one change it exists to catch.
+**`test.yml` carries the mirror-image filter**: `paths-ignore: infra/**`, so an
+infra-only pull request starts no job there. The two legs are each other's
+complement -- the action's tests say nothing about the OpenTofu stack and
+`tofu validate` says nothing about the action -- and neither pays for the
+other's changes. A pull request touching both still runs both, because GitHub
+skips a workflow only when *every* changed file matches the filter.
 
-So the list is enumerated rather than globbed, which fails safe (a new file
-under `infra/` is not ignored, and an omission costs a job that had nothing to
-do), and `src/pr-title-check.test.ts` pins it against `git ls-files infra` in
-both directions: an infra file no test reads must be in the list, an infra file
-a test reads must not be, and an entry naming a path that no longer exists is a
-failure rather than a line that silently matches nothing.
+One thing that costs, and it is written into the workflow rather than only
+here: `src/pr-title-check.test.ts` reads the ruleset out of `infra/github/main.tf`
+to check that every required context is a check run some workflow produces, and
+that test no longer runs on an infra-only change. A required context renamed in
+`main.tf` alone therefore merges unchecked -- `tofu validate` cannot see it --
+and is caught on the next pull request to touch anything else, which is before
+a merge but not before the merge that caused it.
 
-A filtered workflow also writes its list once per event, because GitHub Actions
-does not read YAML anchors. The halves drifting is invisible on a pull request
--- it surfaces later as a merge to `master` that skipped the leg the pull
-request ran -- so a test compares them across every workflow.
-
+A filtered workflow also writes its filter once per event, because GitHub
+Actions does not read YAML anchors. The halves drifting is invisible on a pull
+request -- it surfaces later as a merge to `master` that skipped the leg the
+pull request ran -- so a test compares them across every workflow.
 
 ## A variant entry point calls the original; it never copies it
 

@@ -14,18 +14,14 @@
  * every pull request blocks, and the fix is someone applying the OpenTofu
  * stack by hand. Hence a test rather than a comment.
  *
- * The `paths:` filters belong here for the same reason from the other side.
- * A filtered workflow reports no check run rather than a skipped one, so a
- * filter and a required context are a pair that must never both name a job;
- * and test.yml's filter reaches back into infra/, because this file reads the
- * ruleset out of infra/github/main.tf and so the OpenTofu stack is an input
- * to the suite that guards it. Both directions of that are pinned below.
+ * The path filters belong here for the same reason from the other side. A
+ * filtered workflow reports no check run rather than a skipped one, so a
+ * filter and a required context are a pair that must never both name a job --
+ * and both test.yml and infra.yml are filtered.
  */
 
 import { describe, expect, it } from "vitest";
-import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 import { RECOGNIZED_TYPES } from "./conventional.js";
 
@@ -195,72 +191,5 @@ describe("the pull request title gate", () => {
     // by the paths they touch, and this repository is one package in plain
     // mode besides.
     expect(step?.with?.requireScope).toBe(false);
-  });
-});
-
-/** ignored are the paths test.yml declines to start on. */
-const ignored =
-  workflows().find(({ file }) => file === "test.yml")?.wf.on?.pull_request?.[
-    "paths-ignore"
-  ] ?? [];
-
-/** trackedInfra are the files under infra/, asked of git rather than walked:
- * `tofu init` leaves a ~40MB .terraform/ beside them, and a walk on a laptop
- * that has run `npm run check:infra` would find provider binaries there. */
-function trackedInfra(): string[] {
-  const root = fileURLToPath(new URL("../", import.meta.url));
-  return execFileSync("git", ["ls-files", "infra"], {
-    cwd: root,
-    encoding: "utf8",
-  })
-    .split("\n")
-    .filter((line) => line !== "");
-}
-
-/** infraInputs are the files under infra/ that a test in src/ reads, found the
- * only way that stays true as tests are added: by looking at what they open. */
-function infraInputs(): string[] {
-  const dir = new URL("./", import.meta.url);
-  const found = new Set<string>();
-  for (const file of readdirSync(dir)) {
-    if (!file.endsWith(".test.ts")) continue;
-    const text = readFileSync(new URL(file, dir), "utf8");
-    for (const match of text.matchAll(/["'`]\.\.\/(infra\/[^"'`]+)["'`]/g))
-      found.add(match[1] as string);
-  }
-  return [...found];
-}
-
-describe("the test workflow's path filter", () => {
-  it("skips the infra files no test reads", () => {
-    // The reason the filter exists. A pull request that only moves the
-    // OpenTofu state has nothing to say to a suite that never opens it, and
-    // infra.yml is already the leg that reads those files.
-    const inputs = new Set(infraInputs());
-    for (const file of trackedInfra()) {
-      if (inputs.has(file)) continue;
-      expect(ignored, `${file} is read by no test`).toContain(file);
-    }
-  });
-
-  it("skips no infra file a test reads", () => {
-    // infra/github/main.tf is the one, because this file reads the master
-    // ruleset out of it. Ignoring it would let a renamed required context
-    // merge unchecked, which is the failure the test above it exists to
-    // prevent -- and the filter would have switched that test off for exactly
-    // the pull request that needed it.
-    const inputs = infraInputs();
-    expect(inputs.length).toBeGreaterThan(0);
-    for (const file of inputs)
-      expect(ignored, `${file} is a test input`).not.toContain(file);
-  });
-
-  it("skips nothing that is no longer there", () => {
-    // A path renamed out from under the list is not an error to GitHub: it
-    // silently matches nothing, and the entry reads as though it still does
-    // something.
-    const tracked = new Set(trackedInfra());
-    for (const file of ignored)
-      expect(tracked.has(file), `${file} is not a tracked file`).toBe(true);
   });
 });
