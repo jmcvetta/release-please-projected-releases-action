@@ -5,9 +5,8 @@
 [![License](https://img.shields.io/github/license/jmcvetta/release-please-projected-releases-action)](LICENSE)
 
 A GitHub Action that comments on a pull request with the release-please tags
-merging it will cut — or says plainly that nothing is released. The versions,
-tags and changelog come from a bundled release-please rather than a
-reimplementation of its rules.
+merging it will cut — or says plainly that nothing is released. The numbers
+come from a bundled release-please, not a reimplementation of its rules.
 
 ---
 
