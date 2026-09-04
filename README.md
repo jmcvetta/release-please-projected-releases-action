@@ -305,11 +305,6 @@ repository sets `RELEASE_BOT_APP_ID` and `RELEASE_BOT_PRIVATE_KEY`. GitHub
 suppresses workflow events for anything the default token pushes, so without
 the App that one pull request arrives with no checks on it.
 
-## History
-
-Built inside [jmcvetta/career][career] as `projected-releases/`, so it could
-be exercised against real releases, and extracted here per [career#86][86].
-
 ## License
 
 Copyright (C) 2026 Jason McVetta.
@@ -323,5 +318,3 @@ A PARTICULAR PURPOSE. See the [GNU General Public License](LICENSE) for more
 details.
 
 [2316]: https://github.com/googleapis/release-please/issues/2316
-[career]: https://github.com/jmcvetta/career
-[86]: https://github.com/jmcvetta/career/issues/86
