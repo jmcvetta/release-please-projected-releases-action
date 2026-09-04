@@ -216,8 +216,12 @@ Actions job, its `name:` when it declares one and its job id otherwise -- so
 `infra/github/main.tf` and the workflow hold one pair in two languages, and
 renaming either alone leaves a required check nothing ever reports: pending
 forever, blocking every pull request, fixable only by someone applying the
-stack by hand. `src/pr-title-check.test.ts` pins that pair too, from both
-ends.
+stack by hand. Nothing tests that pair. A test used to, and it was deleted
+along with the two others that scraped the ruleset out of `main.tf`: they
+guarded a rename that happens about never, and once `test.yml` stopped running
+on `infra/` changes the one in `main.tf` -- the likelier half -- went unseen by
+them anyway. So this is a thing to check by hand when renaming either side, and
+the check is one grep.
 
 **The cost lands on the release pull request, and it is real.** GitHub
 suppresses workflow events for everything the default token pushes, and
@@ -297,28 +301,20 @@ all, and a required check that never reports leaves every pull request pending
 forever. The ruleset does now require `validate-title` (see above), and that
 resolved this the second way the sentence used to offer: the filter stayed on
 and `infra` stayed out of the required set. Requiring it later means dropping
-the filter in the same commit, and `src/pr-title-check.test.ts` fails on the
-combination rather than letting a blocked pull request report it.
+the filter in the same commit. Nothing enforces that; the paragraph is the
+enforcement.
 
 **`test.yml` carries the mirror-image filter**: `paths-ignore: infra/**`, so an
-infra-only pull request starts no job there. The two legs are each other's
+infra-only pull request starts no job there, and the two legs are each other's
 complement -- the action's tests say nothing about the OpenTofu stack and
-`tofu validate` says nothing about the action -- and neither pays for the
-other's changes. A pull request touching both still runs both, because GitHub
-skips a workflow only when *every* changed file matches the filter.
+`tofu validate` says nothing about the action. A pull request touching both
+still runs both, because GitHub skips a workflow only when *every* changed file
+matches the filter.
 
-One thing that costs, and it is written into the workflow rather than only
-here: `src/pr-title-check.test.ts` reads the ruleset out of `infra/github/main.tf`
-to check that every required context is a check run some workflow produces, and
-that test no longer runs on an infra-only change. A required context renamed in
-`main.tf` alone therefore merges unchecked -- `tofu validate` cannot see it --
-and is caught on the next pull request to touch anything else, which is before
-a merge but not before the merge that caused it.
-
-A filtered workflow also writes its filter once per event, because GitHub
-Actions does not read YAML anchors. The halves drifting is invisible on a pull
-request -- it surfaces later as a merge to `master` that skipped the leg the
-pull request ran -- so a test compares them across every workflow.
+Both filters are written once per event, because GitHub Actions does not read
+YAML anchors. Keep the halves the same: a drift between them is invisible on a pull
+request and surfaces later as a merge to `master` that skipped the leg the pull
+request ran.
 
 ## A variant entry point calls the original; it never copies it
 

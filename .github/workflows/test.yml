@@ -11,31 +11,24 @@
 # a script of its own, so the thing CI measures stays the thing a laptop runs.
 name: Test
 
-# `paths-ignore: infra/**` because these tests are the action's and the
-# OpenTofu stack is not the action. infra.yml is the leg with something to say
-# about those files, and it runs on the mirror-image filter, so neither leg
-# pays for the other's changes. GitHub evaluates the filter before allocating a
-# runner and skips only when *every* changed file matches, so a pull request
-# touching src/ and infra/ together still runs everything here.
-#
-# What that gives up: src/pr-title-check.test.ts reads infra/github/main.tf to
-# check that every status check the master ruleset requires is a check run some
-# workflow here actually produces. Rename one side alone and GitHub waits
-# forever for a check run that never arrives, leaving every pull request
-# pending. That test no longer runs on an infra-only change, and `tofu
-# validate` cannot see the mistake, so a rename made in main.tf alone lands
-# unchecked and is caught on the next pull request to touch anything else.
+# `paths-ignore: infra/**` because these tests are the action's and the OpenTofu
+# stack is not the action. infra.yml is the leg that reads those files, and it
+# runs on the mirror-image filter, so neither leg pays for the other's changes.
+# GitHub evaluates the filter before allocating a runner and skips only when
+# *every* changed file matches, so a pull request touching src/ and infra/
+# together still runs everything here.
 #
 # Safe only while `test` is not a required check. A path-filtered workflow
-# reports no check run at all rather than a skipped one, so requiring this job
-# means dropping the filter in the same commit; src/pr-title-check.test.ts
-# fails on the combination.
+# reports no check run at all rather than a skipped one, so a required context
+# naming this job would sit "expected" forever on every infra-only pull request,
+# blocking it, and be fixable only by someone applying the OpenTofu stack by
+# hand. Requiring this job means dropping the filter in the same commit.
 
 on:
   push:
     branches: [master]
     # GitHub Actions does not read YAML anchors, so the filter is written out
-    # for each event. src/pr-title-check.test.ts compares the two.
+    # for each event. Keep the two the same.
     paths-ignore:
       - infra/**
   pull_request:
