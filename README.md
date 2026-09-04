@@ -238,10 +238,9 @@ Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has
 the build, the test layout, and how a change gets released.
 [SECURITY.md](SECURITY.md) has what counts as a vulnerability here and how to
 report one privately.
-[docs/DESIGN.md](docs/DESIGN.md) has how the projection is actually computed,
-what the action does *not* delegate to release-please, and the assertion that
-keeps a dependency bump from silently turning the answer into "nothing
-releases".
+
+How the projection is actually computed is written at the code rather than in
+a design document — start with the header comment of `src/pr-view.ts`.
 
 ## License
 

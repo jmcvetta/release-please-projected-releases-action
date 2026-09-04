@@ -9,9 +9,26 @@ instead. The two fail differently, so it is the first thing a report needs.
 The pull request title matters for the same reason — it is what the
 projection is computed from — so quote it verbatim.
 
-[docs/DESIGN.md](docs/DESIGN.md) explains how the projection is computed and
-why it is built that way. This file is the mechanics: how to build it, how the
-tests are arranged, and how a change reaches a tag.
+## Where the design is written down
+
+At the code, not in a document. Start with the header comment of
+`src/pr-view.ts`: it wraps one release-please method so that the pull request
+appears as a commit that has not happened yet, and everything else follows
+from that. `SeamError` in the same file explains what happens when a
+dependency bump moves the seam, and why that has to fail loudly.
+
+The one thing worth knowing before you read anything: four things are *not*
+delegated to release-please, and all four are presentation — the comment
+itself (`src/comment.ts`, `src/render.ts`), withholding a projection when the
+title is malformed, tag spelling, and attributing changed files to packages
+(`src/split.ts`). Everything else is release-please's own answer: the
+versions, the tags, the rendered changelog, and the decision that a commit
+releases nothing at all. So a wrong version in the table is almost always a
+wrong input rather than wrong arithmetic here, and a wrong **Files** count is
+the reverse.
+
+The rest of this file is the mechanics: how to build it, how the tests are
+arranged, and how a change reaches a tag.
 
 ## Development
 
