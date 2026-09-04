@@ -15,17 +15,17 @@
 # from the registry, on every push, for a directory that changes a few times a
 # year.
 #
-# The filter is the leg's real input set rather than its directory: package.json
-# holds the `check:infra` command line, and this file holds everything else.
+# The filter is the leg's real input set rather than its directory: `tofu
+# validate` reads infra/**, and package.json holds the `check:infra` command
+# line. Not this file -- nothing here reads it.
 #
 # Safe to gate this way only because `infra` is not a required check. The
 # ruleset requires `validate-title` and nothing else, and that workflow carries
 # no `paths:` filter for exactly this reason: a path-filtered workflow does not
 # report a skipped check, it reports nothing, and a required check that never
 # reports leaves every pull request pending forever. So requiring this one
-# means dropping the filter first. src/pr-title-check.test.ts fails on the
-# combination rather than leaving it to be discovered on a blocked pull
-# request.
+# means dropping the filter first. Nothing checks that. test.yml is filtered
+# for the same reason and carries the same condition.
 name: Infra
 
 on:
@@ -34,12 +34,10 @@ on:
     paths:
       - infra/**
       - package.json
-      - .github/workflows/infra.yml
   pull_request:
     paths:
       - infra/**
       - package.json
-      - .github/workflows/infra.yml
 
 permissions:
   contents: read
