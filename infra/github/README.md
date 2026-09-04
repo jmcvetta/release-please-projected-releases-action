@@ -60,8 +60,11 @@ npm run check:infra
 It runs `tofu fmt -check`, then `tofu init -backend=false`, then
 `tofu validate`. The `-backend=false` is what keeps it credential-free:
 providers are installed for validation, and neither state nor the GitHub API is
-touched. CI runs it on every pull request, so a syntax error or an attribute
-the provider does not have fails in review.
+touched. `.github/workflows/infra.yml` runs it on every pull request that
+touches this directory, so a syntax error or an attribute the provider does not
+have fails in review. It is its own workflow so that GitHub's `paths:` filter
+can gate it: a pull request that changes only `src/` should not be paying for a
+toolchain download and a provider fetch.
 
 It is not part of `npm run check`, which is the typecheck-build-test chain a
 laptop runs constantly and which must not start requiring OpenTofu to be

@@ -4,9 +4,10 @@
 # no install step and the version they pin is the code that runs. Rebuild it
 # with `npm run build`; CI fails a pull request whose bundle is stale.
 name: release-please Projected Releases
+# Under 125 characters: GitHub Marketplace rejects a longer one.
 description: >-
-  Say which release-please tags merging a pull request will cut, from the
-  Conventional Commit type in its title and the files it changes.
+  Say which release-please tags merging a pull request will cut, from its
+  Conventional Commit title and changed files.
 author: Jason McVetta
 branding:
   icon: tag

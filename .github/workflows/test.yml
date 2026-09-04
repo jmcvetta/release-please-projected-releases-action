@@ -60,7 +60,7 @@ jobs:
       # rather than the source this pull request changed.
       - name: Rebuild the bundle
         run: npm run build
-      - name: Fail if the committed bundle is not the source
+      - name: Bundle staleness check
         run: |
           if ! git diff --quiet -- dist; then
             echo "::error::dist/index.mjs is stale. Run \`npm run build\` and commit it." >&2
@@ -93,13 +93,12 @@ jobs:
       # by design and the write below would fail the check over something the
       # contributor cannot fix. The coverage report is still in the log above.
       #
-      # MIT-licensed, and pinned by commit SHA (v2.13.0) rather than by tag: a
-      # tag can be moved onto different code, a SHA cannot.
-      - name: Comment the coverage this change leaves
+      # MIT-licensed.
+      - name: Coverage comment
         if: >-
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository
-        uses: davelosert/vitest-coverage-report-action@c4bbc33a89b7ace0e63d35f1f7d4bcee31155a73 # v2.13.0
+        uses: davelosert/vitest-coverage-report-action@v2
         with:
           name: coverage
 
@@ -137,51 +136,5 @@ jobs:
           fi
           if ! grep -q "could not determine the repository" <<<"$output"; then
             echo "::error::the bundle did not reach its own input checks" >&2
-            exit 1
-          fi
-
-      # Nothing else in this repository reads infra/github/*.tf: the stack is
-      # applied by hand, because CI holds no GitHub-admin credentials and so
-      # cannot run `plan`. Without the two steps below, the first thing to
-      # parse the configuration would be a person mid-`tofu apply` against live
-      # branch protection. `check:infra` moves that discovery here, and needs
-      # no credentials: `tofu init -backend=false` fetches the provider without
-      # touching state or the GitHub API.
-      #
-      # The version comes from infra/github/.opentofu-version, which is also
-      # what a version manager reads on a laptop, so CI and a developer install
-      # the same OpenTofu from the same pin.
-      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
-        with:
-          tofu_version_file: infra/github/.opentofu-version
-          # The default wrapper replaces `tofu` with a script that swallows
-          # exit codes to republish them as step outputs, which would make a
-          # failing `fmt -check` or `validate` report green.
-          tofu_wrapper: false
-      # A version file the action cannot read is a warning, not a failure: it
-      # installs the latest release and carries on. So CI would keep passing
-      # while testing a version nobody pinned, which is the whole point of
-      # pinning one. Assert it instead.
-      - name: Prove the pinned OpenTofu is the one installed
-        run: |
-          want=$(cat infra/github/.opentofu-version)
-          got=$(tofu version | head -1 | cut -d' ' -f2)
-          if [[ "$got" != "v$want" ]]; then
-            echo "::error::wanted OpenTofu v$want, got $got" >&2
-            exit 1
-          fi
-      - run: npm run check:infra
-      # A lock file that init would rewrite is not a pin anyone is reading:
-      # every init offers a diff nobody meant to make, and the habit is to
-      # commit it unread. Measured on this repository: initialising against the
-      # registry records an `h1:` hash for every platform the provider
-      # publishes, so a lock carrying one platform's hash is rewritten on the
-      # next init. This step fails on that and prints the diff, which is the
-      # fix.
-      - name: Fail if the committed provider lock is not what init produces
-        run: |
-          if ! git diff --quiet -- infra/github/.terraform.lock.hcl; then
-            echo "::error::infra/github/.terraform.lock.hcl is stale. See the diff below." >&2
-            git diff -- infra/github/.terraform.lock.hcl >&2
             exit 1
           fi
