@@ -263,10 +263,17 @@ not folklore about what someone once clicked -- they are declared in
 Two things it is worth knowing before editing that stack, both written up in
 `infra/github/README.md`: the state file is **committed**, which constrains
 what may be added to it (this repository is public, so state is world-readable
-and nothing credential-bearing belongs in it); and `required_status_checks` is
-deliberately absent from the ruleset, because the release pull request is
-opened with the default token and so never receives the check that would be
-required.
+and nothing credential-bearing belongs in it); and the ruleset requires
+`validate-title` and nothing else, because the release pull request is opened
+with the default token and so receives no checks at all -- see the section
+above for what that costs and what removes it.
+
+**An apply is only half done until the state file is committed.** The apply
+happens on someone's laptop, and the state it rewrites is a file in this
+repository. Left uncommitted, the next `tofu plan` from a fresh clone proposes
+re-applying a change that is already live -- which is exactly the signal the
+paragraph above relies on, so a stale state file does not merely lag, it
+breaks the one thing a plan is read for.
 
 `npm run check:infra` validates the configuration without credentials, and CI
 runs it. It is not part of `npm run check`, which must not start requiring
