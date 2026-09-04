@@ -23,9 +23,8 @@
 # no `paths:` filter for exactly this reason: a path-filtered workflow does not
 # report a skipped check, it reports nothing, and a required check that never
 # reports leaves every pull request pending forever. So requiring this one
-# means dropping the filter first. Nothing checks that, so it is on whoever
-# adds the requirement -- the same goes for test.yml, which is filtered for the
-# same reason.
+# means dropping the filter first. Nothing checks that. test.yml is filtered
+# for the same reason and carries the same condition.
 name: Infra
 
 on:

@@ -11,37 +11,26 @@
 # a script of its own, so the thing CI measures stays the thing a laptop runs.
 name: Test
 
-# `paths:` is an allow-list rather than an ignore-list, because the question
-# worth asking is what these tests read, not which directory they are bored by.
-# Ignoring infra/ still ran the whole suite for a change to CLAUDE.md.
+# `paths:` lists what this suite reads. Everything else -- infra/**, the prose,
+# examples/**, the Makefile, the other workflows -- starts no job here. GitHub
+# evaluates the filter before allocating a runner, and runs the workflow when
+# any changed file matches.
 #
-# The list is the suite's input set, and it is longer than src/ because two
-# tests reach outside it: bundle.test.ts runs dist/index.mjs as a process and
-# packaging.test.ts reads action.yml, while conventional.ts falls back to
-# conventional-types.json. The rest are what typecheck, build and install
-# consume. Add to it when a test starts reading something new -- an input that
-# is not here is one this workflow does not run on, and nothing reports that.
+# Wider than src/** because two tests reach outside it: bundle.test.ts runs
+# dist/index.mjs as a process and packaging.test.ts reads action.yml. The rest
+# is what typecheck, build and install consume. This file is listed so that
+# editing the filter re-runs the job. Extend the list when a test starts
+# reading something new -- nothing reports an input left off it.
 #
-# What is deliberately absent: infra/**, the prose (README, CLAUDE.md,
-# CONTRIBUTING, SECURITY, CHANGELOG), examples/**, the Makefile, and every
-# workflow but this one. This suite tests the action, so nothing it contains
-# has an opinion about a workflow -- this file is here only because a change
-# to it changes what runs. GitHub evaluates this before allocating a runner and
-# starts the workflow when *any* changed file matches, so a pull request
-# touching src/ and CLAUDE.md together still runs everything here.
-#
-# Safe only while `test` is not a required check. A path-filtered workflow
-# reports no check run at all rather than a skipped one, so a required context
-# naming this job would sit "expected" forever on every pull request that
-# matches nothing above, blocking it, and be fixable only by someone applying
-# the OpenTofu stack by hand. Requiring this job means dropping the filter in
-# the same commit.
+# Only safe while `test` is not a required check. A path-filtered workflow
+# reports no check run rather than a skipped one, so a required context naming
+# this job would block every pull request that matches nothing above. Requiring
+# it means dropping the filter in the same commit.
 
 on:
   push:
     branches: [master]
-    # GitHub Actions does not read YAML anchors, so the list is written out for
-    # each event. Keep the two the same.
+    # Repeated under pull_request: GitHub Actions does not read YAML anchors.
     paths:
       - src/**
       - dist/**
