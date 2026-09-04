@@ -5,52 +5,8 @@
 [![License](https://img.shields.io/github/license/jmcvetta/release-please-projected-releases-action)](LICENSE)
 
 A GitHub Action that comments on a pull request with the release-please tags
-merging it will cut — or says plainly that nothing is released.
-
-- Works with release-please in **manifest mode and plain mode**.
-- **Read-only.** The default `GITHUB_TOKEN` is enough; no App identity needed.
-- The answer comes from **release-please itself**, not a reimplementation.
-
-## Quick start
-
-```yaml
-name: Projected releases
-on:
-  pull_request:
-    types: [opened, reopened, synchronize, edited]
-concurrency:
-  group: projected-releases-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-jobs:
-  preview:
-    runs-on: ubuntu-latest
-    if: ${{ !startsWith(github.event.pull_request.head.ref, 'release-please--') }}
-    permissions:
-      contents: read        # release-please's reads
-      pull-requests: write  # the sticky comment only
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: jmcvetta/release-please-projected-releases-action@v0
-```
-
-Four lines are load-bearing:
-
-- **`edited`** — the projection comes from the title; a title fixed after
-  review has to re-render.
-- **`concurrency`** — an edit and a push can race the sticky comment.
-- **`fetch-depth: 0`** — the diff runs from the merge base. Shallow falls back
-  to the API, capped at 3000 files.
-- **the `if:`** — a release pull request cuts its tag from the manifest, not
-  the title, so the projection would be wrong about it.
-
-`@v0` tracks the latest `0.x`; pin a full version if a minor bump changing
-behaviour would bother you.
-
-## The comment
-
-One sticky comment, edited in place as the title or branch changes:
+merging it will cut — or says plainly that nothing is released. Reviewers stop
+guessing what a title and a diff add up to.
 
 ---
 
@@ -84,94 +40,90 @@ matching path, and a repository-root file to none.
 
 ---
 
-A package gets a row when the pull request touched it or when either pass
-projects a release for it; the rest are counted underneath. **Package**,
-**Path** and **Tag** appear only when they add something. When nothing
-releases there is no table at all, just ``None — `docs:` produces no
+One sticky comment, re-rendered as the title or the branch changes. When
+nothing releases there is no table, just ``None — `docs:` produces no
 release.``
 
-## Why
+## Does it fit your repository?
 
-Two invisible things decide what a merge releases: which packages the changed
-files belong to, and the Conventional Commit type in the **title**, which only
-becomes a commit subject at squash time. Neither is visible while reviewing,
-and getting either wrong is quiet — a stray `feat!:` cuts a major version,
-noticed after the merge.
+- **release-please**, in manifest mode or plain mode. A manifest in the
+  checkout is read as-is; without one, pass the same `release-type` your
+  release workflow does.
+- **Squash-merge**, which is what makes the title the commit. The action reads
+  your merge settings and says so in the comment if they would not.
+- **Read-only.** The default `GITHUB_TOKEN` is enough; nothing is pushed, no
+  App identity, no other service.
+- **Not a reimplementation** — versions, tags and changelog come from a
+  bundled release-please, so they match what your release actually does.
+- Monorepos included: a row per package, and the ones the diff missed counted
+  underneath.
 
-Squash-merge is therefore assumed. The action reads the repository's merge
-settings and says so in the comment when they would not produce the single
-commit it projects from.
+## Quick start
 
-## Manifest mode and plain mode
-
-A `release-please-config.json` and `.release-please-manifest.json` in the
-checkout are read as-is; nothing to configure. Without them, pass the same
-`release-type` your release workflow does:
+Copy to `.github/workflows/projected-releases.yml`:
 
 ```yaml
-      - uses: jmcvetta/release-please-projected-releases-action@v0
+name: Projected releases
+on:
+  pull_request:
+    # `edited` matters: the projection comes from the title.
+    types: [opened, reopened, synchronize, edited]
+permissions:
+  contents: read
+  pull-requests: write   # the sticky comment only
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
         with:
-          release-type: node
+          fetch-depth: 0   # the diff runs from the merge base
+      - uses: jmcvetta/release-please-projected-releases-action@v0
 ```
 
-`package-path`, `component`, `include-component-in-tag` and `tag-separator`
-go with it and default to single-package conventions.
+[`examples/projected-releases.yml`](examples/projected-releases.yml) is the
+same with two additions worth having: a `concurrency` group, so an edit and a
+push cannot race the comment, and an `if:` skipping release-please's own
+release pull requests. `@v0` tracks the latest `0.x`.
 
-## Inputs
+## Configuration
 
 Everything about the pull request defaults to the webhook payload, so the
 ordinary caller sets nothing. Full list with defaults in
-[`action.yml`](action.yml).
+[`action.yml`](action.yml); the ones worth knowing:
 
 | Input | Default | What it is for |
 | --- | --- | --- |
-| `token` | `github.token` | Needs `contents: read`, plus `pull-requests: write` to comment. |
+| `release-type` | _unset_ | Plain mode — `node`, `python`, `simple`, … Empty means manifest mode. |
 | `mode` | `render-and-comment` | `render` writes the file and outputs only; `comment` posts a body an earlier job rendered. The two halves of the fork-safe arrangement. |
-| `changed-files` | `auto` | `auto` diffs the checkout and falls back to the API (3000 files max) when it is too shallow; `git` insists; `api` skips the checkout. |
-| `merge-method` | `auto` | `auto` reads the repository's settings. Set it to skip that read. |
-| `release-type` | _unset_ | Plain mode; see above. Empty means manifest mode. |
+| `changed-files` | `auto` | `auto` diffs the checkout and falls back to the API when it is too shallow; `git` insists; `api` skips the checkout. |
+| `merge-method` | `auto` | `auto` reads your repository settings. Set it to skip that read. |
 | `visible-types` / `hidden-types` | resolved | Force the changelog type list when `changelog-sections` does not describe it. |
-| `link-release-prs` | `true` | Lists open pull requests so a pending version links to the release pull request holding it. Costs `pull-requests: read`; set false to skip the call rather than grant it. |
 | `comment-header` | `projected-releases` | Identifies the sticky comment. Change it only to keep two invocations apart. |
 
-## Outputs
-
-`comment-file`, `body`, `releases` (JSON, one `{component, version, notes}`
-per tag), `releases-count`, `malformed-title` (`true` when the title is not a
-Conventional Commit the changelog recognizes), and `recognized-types`.
-
-Feed `recognized-types` to a PR-title gate rather than keeping a second copy
-of the list: too strict red-lights a title that would have released correctly,
-too loose lets a commit through that the changelog silently omits.
+Outputs: `body`, `comment-file`, `releases` (JSON, one
+`{component, version, notes}` per tag), `releases-count`, `malformed-title`,
+and `recognized-types` — feed that last one to a PR-title gate rather than
+keeping a second copy of the list.
 
 ## Fork pull requests
 
 A `pull_request` event from a fork gets a read-only token, so the comment
-cannot be posted from that run. The action says so and leaves the projection
-in the job summary rather than failing.
-
-To comment anyway, copy the `workflow_run` pair:
+cannot be posted from that run; the action says so and leaves the projection
+in the job summary. To comment anyway, copy the `workflow_run` pair —
 [`fork-safe-render.yml`](examples/fork-safe-render.yml) renders under the
-fork's read-only token and uploads the markdown,
-[`fork-safe-comment.yml`](examples/fork-safe-comment.yml) runs from your
-default branch and posts it. Deliberately not `pull_request_target`, which
-would run the head's code with a write token; and the posting job takes the
-pull request number from the API, never from the artifact a fork controls.
+fork's token, [`fork-safe-comment.yml`](examples/fork-safe-comment.yml) posts
+from your default branch. Deliberately not `pull_request_target`, which would
+run the head's code with a write token.
 
 ## Command line
 
-The bundle is also a command line, for a projection before the pull request
-exists — same configuration, same markdown:
+The same bundle is a command line, for a projection before the pull request
+exists:
 
 ```
 node dist/index.mjs --title "feat: a thing" --repo owner/name --base main --out preview.md
 ```
-
-## Compatibility
-
-The action bundles `release-please@17.11.2`, so the projection is computed by
-that version rather than whichever your release workflow runs. Nothing has to
-match, but different majors can disagree.
 
 ## Contributing
 
