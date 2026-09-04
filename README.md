@@ -5,7 +5,7 @@ merging it will cut — or that nothing is released, which is the common case
 and is stated as an answer rather than left as silence.
 
 ```yaml
-- uses: actions/checkout@v5
+- uses: actions/checkout@v7
   with:
     fetch-depth: 0
 - uses: jmcvetta/release-please-projected-releases-action@v0
