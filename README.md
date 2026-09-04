@@ -72,14 +72,23 @@ jobs:
       - uses: jmcvetta/release-please-projected-releases-action@v0
 ```
 
-If your repository has no `release-please-config.json`, add
-`release-type: <your release workflow's>` under `with:` — that is the only
-thing this action ever needs told.
-
 Keep `edited` in the trigger list: the projection comes from the title, so a
 title fixed after review has to re-render. `@v0` tracks the latest `0.x`, and
 [`examples/projected-releases.yml`](examples/projected-releases.yml) adds a
 `concurrency` group and skips release-please's own release pull requests.
+
+## Configuration
+
+Repositories with a `release-please-config.json` need none.
+
+Without one, release-please is configured by the `release-type:` your release
+workflow passes it. Pass this action the same value:
+
+```yaml
+      - uses: jmcvetta/release-please-projected-releases-action@v0
+        with:
+          release-type: node
+```
 
 ## Command line
 
