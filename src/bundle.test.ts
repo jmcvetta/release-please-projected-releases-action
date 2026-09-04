@@ -94,8 +94,10 @@ describe("the committed bundle, run against a fake GitHub", () => {
     expect(out).toContain("a thing");
   });
 
-  it("reports that a hidden type releases nothing", async () => {
-    expect(await project("chore: tidy up")).toContain("hidden type");
+  it("reports that a type that releases nothing releases nothing", async () => {
+    expect(await project("chore: tidy up")).toContain(
+      "None — `chore:` produces no release.",
+    );
   });
 
   it("asks for GraphQL at /graphql and nowhere else", async () => {

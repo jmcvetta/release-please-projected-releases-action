@@ -6,7 +6,14 @@
  * it. A line above the table says why nothing releases, which no row can; when
  * something does release, the row says it all and there is no line. Most pull
  * requests in a repository like this one release nothing at all, so "nothing
- * will be released" is stated as an answer rather than left as silence.
+ * will be released" is stated as an answer rather than left as silence — and
+ * stated in the line alone, because a table with no version in it is a table
+ * the reader has to check before learning there was nothing to check.
+ *
+ * What it does not do is explain release-please. Which types release, what a
+ * changelog section is, how a manifest names its packages: release-please
+ * documents all of it, and a comment that documents it again is longer,
+ * duplicated, and wrong the day the upstream default changes.
  *
  * Packages the pull request neither touches nor releases are accounted for in
  * one line below the table rather than one row each, so the comment's length
@@ -185,19 +192,23 @@ function renderProjection(
   const dropped = rows.filter((r) => !affected(r));
 
   const said = verdict(projection, options, moved, unmoved, touchedPackages);
-  const out = [
-    "## Projected releases",
-    "",
-    ...(said ? [said, ""] : []),
+  const out = ["## Projected releases"];
+  if (said) out.push("", said);
+
+  // The table is for reading versions off. With a release on neither side of
+  // every row it holds no version to read: the release columns are em dashes
+  // top to bottom and the answer is entirely in the line above, which the
+  // reader reaches only after checking a table that had nothing in it. The
+  // files each package claimed are still listed, under **Matched files**.
+  if (shown.some(releasing)) {
     // Columns are decided by every row, not just the shown ones: whether
     // **Path** is worth a column is a fact about the repository, and a
     // heading that comes and goes with the files a pull request happens to
     // touch reads as a different table each time.
-    ...(shown.length > 0 ? table(shown, rows, options) : []),
-  ];
-
-  const line = coverage(dropped, shown.length > 0);
-  if (line) out.push("", line);
+    out.push("", ...table(shown, rows, options));
+    const line = coverage(dropped, shown.length > 0);
+    if (line) out.push("", line);
+  }
 
   const byComponent = groupBy(projection.packages, (p) => p.releaseComponent);
   const shared = new Set(
@@ -218,9 +229,15 @@ function renderProjection(
   });
   if (warnings.length > 0) out.push("", ...warnings);
 
-  if (moved.length > 0) out.push("", changelog(moved));
+  if (moved.length > 0) out.push("", changelog(moved, rows.length > 1));
   out.push("", matchedFiles(projection));
   return out;
+}
+
+/** releasing reports whether a row has a version to show in either release
+ * column, which is the only reason the table is worth printing. */
+function releasing(row: Row): boolean {
+  return row.projected !== undefined || row.pending !== undefined;
 }
 
 /**
@@ -304,6 +321,12 @@ function buildRows(projection: Projection): {
  * column would repeat the one beside it for every row — release-please's own
  * spelling, which a reader of this comment knows.
  *
+ * **Package** appears only where there is more than one to name. Outside a
+ * manifest release-please releases the repository, not a package in it: the
+ * name in that column is one release-please derived for itself (a `node`
+ * release takes the package.json name), it appears in no tag, and a reader of
+ * a single-package repository has no second package to tell it from.
+ *
  * **Path** appears only where the rows do not share one. It answers "which of
  * these packages claimed the file", a question a single-package repository
  * does not have: plain mode configures its one package from `release-type:`
@@ -321,6 +344,7 @@ function table(
   all: readonly Row[],
   options: RenderOptions,
 ): string[] {
+  const showPackage = all.length > 1;
   const showPath = new Set(all.map((r) => r.pkg.path)).size > 1;
   // Asked of the tags actually rendered, not of the configuration: a package
   // that would tag with its component but has no projected release spells no
@@ -331,7 +355,7 @@ function table(
       tagFor(r.pkg, r.projected.version) !== `v${r.projected.version}`,
   );
   const columns = [
-    "Package",
+    ...(showPackage ? ["Package"] : []),
     ...(showPath ? ["Path"] : []),
     "Files",
     "Current",
@@ -346,7 +370,7 @@ function table(
   for (const row of rows) {
     const version = row.projected?.version;
     const cells = [
-      code(row.pkg.component),
+      ...(showPackage ? [code(row.pkg.component)] : []),
       ...(showPath ? [code(row.pkg.path)] : []),
       String(row.files.length || "—"),
       row.pkg.current ?? "—",
@@ -376,11 +400,7 @@ function table(
  * around the two that answer the question the comment exists to answer.
  */
 function affected(row: Row): boolean {
-  return (
-    row.files.length > 0 ||
-    row.projected !== undefined ||
-    row.pending !== undefined
-  );
+  return row.files.length > 0 || releasing(row);
 }
 
 /** NAMED_UNCHANGED is how many unchanged packages the coverage line will
@@ -449,8 +469,8 @@ function verdict(
     // Saying only that the version does not move reads as contributing
     // nothing, which for a `feat:` is wrong.
     return visibleTitle(options)
-      ? `No version change — \`${type}\` adds only a changelog line.`
-      : `No version change — \`${type}\` is a hidden type.`;
+      ? `No version change — \`${type}:\` adds only a changelog line.`
+      : `No version change — \`${type}:\` adds nothing to the release already coming.`;
   }
   return none(projection, options, touchedPackages);
 }
@@ -528,7 +548,8 @@ function claimOrder(
 /**
  * none states which of the two reasons applies. They call for different
  * fixes: one is about the files the branch touches, the other about the type
- * in the title.
+ * in the title. Which types do release is release-please's documentation to
+ * give, and it gave it; the line names the one type in front of the reader.
  *
  * Both statements are scoped to the components this pull request touches,
  * which is what an empty answer actually establishes. A standing release
@@ -554,16 +575,15 @@ function none(
     return line;
   }
 
-  const types = options.types ?? DEFAULT_TYPES;
-  const visible = [...types.visible].sort().map((t) => `\`${t}\``).join(", ");
   const type = titleType(options.title) ?? "";
   // A visible type reaching here is not the ordinary case -- release-please
   // attributes files itself, so it can project nothing for a component this
   // preview counts as touched (a path the package excludes, say). Whatever
-  // the cause, the title is not a hidden type and must not be called one.
+  // the cause, the title is not one that releases nothing and must not be
+  // reported as one.
   return visibleTitle(options)
     ? "None — release-please projects no release for the packages touched."
-    : `None — \`${type}\` is a hidden type. Only ${visible} open a release.`;
+    : `None — \`${type}:\` produces no release.`;
 }
 
 /**
@@ -657,11 +677,17 @@ function warn(
 }
 
 /** changelog shows the notes release-please rendered, which are the release
- * notes the tag will actually carry. Secondary to the numbers, so collapsed. */
-function changelog(moved: readonly MovedRow[]): string {
+ * notes the tag will actually carry. Secondary to the numbers, so collapsed.
+ * `named` follows the table's **Package** column: with one package there is
+ * nothing to tell these notes apart from. */
+function changelog(moved: readonly MovedRow[], named: boolean): string {
   const body = moved
     .filter((r) => r.projected.notes)
-    .map((r) => `#### ${code(r.pkg.component)}\n\n${r.projected.notes}`)
+    .map((r) =>
+      named
+        ? `#### ${code(r.pkg.component)}\n\n${r.projected.notes}`
+        : r.projected.notes,
+    )
     .join("\n\n");
   return [
     "<details><summary>Changelog preview</summary>",
@@ -678,11 +704,12 @@ function changelog(moved: readonly MovedRow[]): string {
  * cause. Collapsed, because the count is the part that is read.
  */
 function matchedFiles(projection: Projection): string {
+  const named = projection.packages.length > 1;
   const lines = ["<details><summary>Matched files</summary>", ""];
   for (const [path, files] of projection.touched) {
     const pkg = projection.packages.find((p) => p.path === path);
     const shown = files.slice(0, 10);
-    lines.push(`\`${pkg?.component ?? path}\` matched:`);
+    if (named) lines.push(`\`${pkg?.component ?? path}\` matched:`);
     for (const file of shown) lines.push(`- \`${file}\``);
     if (files.length > shown.length) {
       lines.push(`- …and ${files.length - shown.length} more`);
@@ -695,14 +722,20 @@ function matchedFiles(projection: Projection): string {
   // listing above it -- as it did on every comment this action posted on its
   // own repository, which releases in plain mode from `.`.
   const rooted = projection.packages.some((p) => p.path === ROOT_PACKAGE_PATH);
-  lines.push(
-    rooted
-      ? "A file belongs to the package with the longest matching path;" +
-        ` \`${ROOT_PACKAGE_PATH}\` takes every file besides.`
-      : "A file belongs to the package with the longest matching path; a" +
-        " repository-root file belongs to none.",
-    "",
-    "</details>",
-  );
+  // One package rooted at the repository takes every file there is, so there
+  // was no attribution to explain: the rule would describe a choice the
+  // repository never makes, on the listing of a plain-mode repository where
+  // it is the only thing under the heading.
+  if (named || !rooted) {
+    lines.push(
+      rooted
+        ? "A file belongs to the package with the longest matching path;" +
+          ` \`${ROOT_PACKAGE_PATH}\` takes every file besides.`
+        : "A file belongs to the package with the longest matching path; a" +
+          " repository-root file belongs to none.",
+      "",
+    );
+  }
+  lines.push("</details>");
   return lines.join("\n");
 }

@@ -62024,18 +62024,13 @@ function renderProjection(projection, options) {
   const shown = rows.filter(affected);
   const dropped = rows.filter((r) => !affected(r));
   const said = verdict(projection, options, moved, unmoved, touchedPackages);
-  const out = [
-    "## Projected releases",
-    "",
-    ...said ? [said, ""] : [],
-    // Columns are decided by every row, not just the shown ones: whether
-    // **Path** is worth a column is a fact about the repository, and a
-    // heading that comes and goes with the files a pull request happens to
-    // touch reads as a different table each time.
-    ...shown.length > 0 ? table(shown, rows, options) : []
-  ];
-  const line = coverage(dropped, shown.length > 0);
-  if (line) out.push("", line);
+  const out = ["## Projected releases"];
+  if (said) out.push("", said);
+  if (shown.some(releasing)) {
+    out.push("", ...table(shown, rows, options));
+    const line = coverage(dropped, shown.length > 0);
+    if (line) out.push("", line);
+  }
   const byComponent = groupBy(projection.packages, (p) => p.releaseComponent);
   const shared = new Set(
     [...byComponent].filter(([, list]) => list.length > 1).map(([c]) => c)
@@ -62051,9 +62046,12 @@ function renderProjection(projection, options) {
     )
   });
   if (warnings.length > 0) out.push("", ...warnings);
-  if (moved.length > 0) out.push("", changelog(moved));
+  if (moved.length > 0) out.push("", changelog(moved, rows.length > 1));
   out.push("", matchedFiles(projection));
   return out;
+}
+function releasing(row) {
+  return row.projected !== void 0 || row.pending !== void 0;
 }
 function buildRows(projection) {
   const byComponent = groupBy(projection.packages, (p) => p.releaseComponent);
@@ -62097,12 +62095,13 @@ function buildRows(projection) {
   return { rows: [...rows, ...invented], unmatched };
 }
 function table(rows, all, options) {
+  const showPackage = all.length > 1;
   const showPath = new Set(all.map((r) => r.pkg.path)).size > 1;
   const showTag = rows.some(
     (r) => r.projected !== void 0 && tagFor(r.pkg, r.projected.version) !== `v${r.projected.version}`
   );
   const columns = [
-    "Package",
+    ...showPackage ? ["Package"] : [],
     ...showPath ? ["Path"] : [],
     "Files",
     "Current",
@@ -62117,7 +62116,7 @@ function table(rows, all, options) {
   for (const row of rows) {
     const version = row.projected?.version;
     const cells = [
-      code(row.pkg.component),
+      ...showPackage ? [code(row.pkg.component)] : [],
       ...showPath ? [code(row.pkg.path)] : [],
       String(row.files.length || "\u2014"),
       row.pkg.current ?? "\u2014",
@@ -62130,7 +62129,7 @@ function table(rows, all, options) {
   return out;
 }
 function affected(row) {
-  return row.files.length > 0 || row.projected !== void 0 || row.pending !== void 0;
+  return row.files.length > 0 || releasing(row);
 }
 var NAMED_UNCHANGED = 3;
 function coverage(dropped, others) {
@@ -62152,7 +62151,7 @@ function verdict(projection, options, moved, unmoved, touchedPackages) {
   if (moved.length > 0) return void 0;
   const type = titleType(options.title) ?? "";
   if (unmoved.length > 0) {
-    return visibleTitle(options) ? `No version change \u2014 \`${type}\` adds only a changelog line.` : `No version change \u2014 \`${type}\` is a hidden type.`;
+    return visibleTitle(options) ? `No version change \u2014 \`${type}:\` adds only a changelog line.` : `No version change \u2014 \`${type}:\` adds nothing to the release already coming.`;
   }
   return none(projection, options, touchedPackages);
 }
@@ -62199,10 +62198,8 @@ function none(projection, options, touched) {
     }
     return line;
   }
-  const types = options.types ?? DEFAULT_TYPES;
-  const visible = [...types.visible].sort().map((t) => `\`${t}\``).join(", ");
   const type = titleType(options.title) ?? "";
-  return visibleTitle(options) ? "None \u2014 release-please projects no release for the packages touched." : `None \u2014 \`${type}\` is a hidden type. Only ${visible} open a release.`;
+  return visibleTitle(options) ? "None \u2014 release-please projects no release for the packages touched." : `None \u2014 \`${type}:\` produces no release.`;
 }
 function releasePrUrl(component, options) {
   const prs = options.releasePrs;
@@ -62240,10 +62237,12 @@ function warn(projection, options, moved, components) {
   }
   return warnings;
 }
-function changelog(moved) {
-  const body = moved.filter((r) => r.projected.notes).map((r) => `#### ${code(r.pkg.component)}
+function changelog(moved, named) {
+  const body = moved.filter((r) => r.projected.notes).map(
+    (r) => named ? `#### ${code(r.pkg.component)}
 
-${r.projected.notes}`).join("\n\n");
+${r.projected.notes}` : r.projected.notes
+  ).join("\n\n");
   return [
     "<details><summary>Changelog preview</summary>",
     "",
@@ -62253,11 +62252,12 @@ ${r.projected.notes}`).join("\n\n");
   ].join("\n");
 }
 function matchedFiles(projection) {
+  const named = projection.packages.length > 1;
   const lines = ["<details><summary>Matched files</summary>", ""];
   for (const [path, files] of projection.touched) {
     const pkg = projection.packages.find((p) => p.path === path);
     const shown = files.slice(0, 10);
-    lines.push(`\`${pkg?.component ?? path}\` matched:`);
+    if (named) lines.push(`\`${pkg?.component ?? path}\` matched:`);
     for (const file of shown) lines.push(`- \`${file}\``);
     if (files.length > shown.length) {
       lines.push(`- \u2026and ${files.length - shown.length} more`);
@@ -62265,11 +62265,13 @@ function matchedFiles(projection) {
     lines.push("");
   }
   const rooted = projection.packages.some((p) => p.path === ROOT_PACKAGE_PATH);
-  lines.push(
-    rooted ? `A file belongs to the package with the longest matching path; \`${ROOT_PACKAGE_PATH}\` takes every file besides.` : "A file belongs to the package with the longest matching path; a repository-root file belongs to none.",
-    "",
-    "</details>"
-  );
+  if (named || !rooted) {
+    lines.push(
+      rooted ? `A file belongs to the package with the longest matching path; \`${ROOT_PACKAGE_PATH}\` takes every file besides.` : "A file belongs to the package with the longest matching path; a repository-root file belongs to none.",
+      ""
+    );
+  }
+  lines.push("</details>");
   return lines.join("\n");
 }
 

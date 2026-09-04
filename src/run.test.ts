@@ -78,17 +78,18 @@ async function comment(
 describe("buildComment", () => {
   it("renders the tag a feature would cut", async () => {
     const out = await comment("feat: a thing");
-    // One package, so no Path column: it would be `api` and nothing else.
-    expect(out).toContain(
-      "| `acme-api` | 1 | 2.4.1 | — | **2.5.0** | `acme-api@v2.5.0` |",
-    );
+    // One package, so no Package or Path column: they would be `acme-api`
+    // and `api`, once each, on the one row there is.
+    expect(out).toContain("| 1 | 2.4.1 | — | **2.5.0** | `acme-api@v2.5.0` |");
     expect(out).toContain("Changelog preview");
   });
 
-  it("says nothing releases for a hidden type, as an answer", async () => {
+  // The answer is the line; a table of em dashes under it is one the reader
+  // has to check before finding out there was nothing in it.
+  it("says nothing releases for a type that does not, as an answer", async () => {
     const out = await comment("chore: tidy up");
-    expect(out).toContain("`chore` is a hidden type");
-    expect(out).toContain("| `acme-api` | 1 | 2.4.1 |");
+    expect(out).toContain("None — `chore:` produces no release.");
+    expect(out).not.toContain("| Current |");
   });
 
   it("says which directories a pull request outside every package hit", async () => {
@@ -132,7 +133,7 @@ describe("buildComment", () => {
     // the projection as malformed told the author to rewrite a title that was
     // fine, on every `chore:` and `docs:` pull request such a repository has.
     const quiet = await comment("feat: a thing", { config });
-    expect(quiet).toContain("`feat` is a hidden type");
+    expect(quiet).toContain("None — `feat:` produces no release.");
     expect(quiet).not.toContain("malformed PR title");
 
     const rejected = await comment("nonsense: a thing", { config });

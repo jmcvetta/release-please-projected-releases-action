@@ -75,17 +75,28 @@ makes the comparison a comparison. The packages left over are counted in the
 line below the table, named while there are few of them, so the comment's
 length follows the change rather than the repository.
 
-Two columns appear only when they say something the others do not. **Tag**
+Three columns appear only when they say something the others do not. **Tag**
 is there when a tag carries its package's component, which
 `include-component-in-tag` and `tag-separator` decide and nothing else in the
 row predicts; without one a tag is `v` and the version, so the column would
 repeat **Projected** on every line. **Path** is there when the repository's
 packages disagree on it, so a single-package repository does not carry a
-column of `.`.
+column of `.`. **Package** is there when there is more than one to name:
+outside a manifest release-please releases the repository rather than a
+package in it, and the name it derives for that one package appears in no tag
+and tells the row apart from nothing.
 
-A line appears above the table only when no row can answer — `None — \`docs\`
-is a hidden type.` A merge that does release gets no line, because the row
-already says what, how much, and under which tag.
+A line appears above the table only when no row can answer — `None — \`docs:\`
+produces no release.` A merge that does release gets no line, because the row
+already says what, how much, and under which tag. When nothing releases at
+all, the line is the whole answer and there is no table under it: every
+version cell would be an em dash, and the reader would have to read the table
+to find that out.
+
+The comment reports; it does not teach. Which commit types release, what a
+changelog section is, how a manifest names its packages — release-please
+documents all of that, and a copy of it on every pull request would only be
+longer and, eventually, wrong.
 
 ## Why it exists
 
