@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/jmcvetta/release-please-projected-releases-action/compare/v0.2.1...v0.2.2) (2026-09-04)
+
+
+### Bug Fixes
+
+* table only the packages a pull request affects ([#35](https://github.com/jmcvetta/release-please-projected-releases-action/issues/35)) ([ff24d76](https://github.com/jmcvetta/release-please-projected-releases-action/commit/ff24d7682e1cdc3d02157c9f73f9225aaebe122a))
+
 ## [0.2.1](https://github.com/jmcvetta/release-please-projected-releases-action/compare/v0.2.0...v0.2.1) (2026-09-04)
 
 
