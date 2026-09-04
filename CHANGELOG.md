@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.3](https://github.com/jmcvetta/release-please-projected-releases-action/compare/v0.2.2...v0.2.3) (2026-09-04)
+
+
+### Bug Fixes
+
+* drop the table, and the release-please tutorial, when nothing releases ([#41](https://github.com/jmcvetta/release-please-projected-releases-action/issues/41)) ([8628620](https://github.com/jmcvetta/release-please-projected-releases-action/commit/862862060fad87e5718a1113b1e90f89d9c1d19a))
+* shorten action description below the Marketplace limit ([#45](https://github.com/jmcvetta/release-please-projected-releases-action/issues/45)) ([11477b2](https://github.com/jmcvetta/release-please-projected-releases-action/commit/11477b23af8fb4466e770e6db4a97cc3d01878a7))
+
 ## [0.2.2](https://github.com/jmcvetta/release-please-projected-releases-action/compare/v0.2.1...v0.2.2) (2026-09-04)
 
 
