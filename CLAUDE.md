@@ -386,6 +386,69 @@ what is true of both and leaves the reading to the reader.
 manifest resolves on its own branch and not on the one it targets, which is
 the ordinary shape of the repair, so the warning says which side it found.
 
+## The two passes read the history once, and the file lists come from git
+
+A projection runs release-please twice over the same target branch, and the
+second walk used to re-read every commit the first one had already read. On a
+repository where the walk is expensive that is the whole cost paid twice: 103
+seconds became a 183-second step on `jmcvetta/career` (issue #54).
+`commits.ts` memoizes the walk, and `pr-view.ts`'s synthetic commit is yielded
+in front of it.
+
+**Do not delegate to the upstream iterator with `yield*`.** release-please
+stops a walk by breaking out of a `for await`, which calls `return()` on the
+generator it is reading, and `yield*` forwards that upstream -- closing the
+shared walk for good and leaving the second pass with only what the first
+happened to need. Pulling one commit at a time leaves it suspended instead.
+
+**The file lists are the other half, and they were the larger one.**
+release-please backfills `commit.files` with one serial REST call for every
+commit GitHub does not associate with a merged pull request -- about 80% of
+them on a branch carrying direct pushes, so 338 requests in the measured walk.
+`commitFileIndex` in `git.ts` answers all of them from one `git log`. A sha is
+either in the index and right, or absent and asked about as before: a file list
+is a property of the commit, not of the branch it was found on. What it
+declines is a shallow checkout (`actions/checkout`'s default, which would index
+a fraction of the history and look complete doing it) and an output holding a
+quoted path, since unescaping git's C-style quoting to save a few requests
+would be a second parser to get wrong.
+
+`--diff-merges=first-parent` is load-bearing: `git log --name-only` reports no
+files at all for a merge commit, and an empty list served confidently is worse
+than no index, because a commit attributed to no component silently releases
+nothing.
+
+**The page size is passed too, and the search depth deliberately is not
+changed.** release-please defaults `commitBatchSize` to 10, which is 42 serial
+GraphQL pages over a 419-commit history and 5 at 100; it changes nothing about
+the answer. `commitSearchDepth` is passed as release-please's own 500, because
+the local index is built to the same number and an index shallower than the
+walk sends the walk to the API for what it stopped short of. Both are withheld
+when the repository's own config declares them: the projection has to describe
+the release-please run the merge will get, not a differently configured one.
+
+**The receiver is the part that fails silently.** release-please calls
+`this.getCommitFiles` from inside its own iterator, so an override on a wrapper
+only ever runs if the upstream iterator was *started* with the wrapper as its
+receiver. Get that wrong and nothing breaks -- the API answers, the projection
+is right, the index is simply never consulted and the action is slow again. Two
+tests in `commits.test.ts` drive real release-please over the fake HTTP server
+with the index and the API disagreeing about which directory a commit touched,
+so the component that comes out names which one was read.
+
+**What issue #54 asked for and this does not do is cap the walk.** An
+unresolved boundary sets `needsBootstrap`, which disables the early exit, and
+capping the walk there looked free. It is not available: release-please logs
+the `No latest release found for path:` line *after* the commit walk, not
+before it, so nothing that reads it can gate the walk it explains. The signal
+that does arrive first -- `Expected N releases, only found M`, logged a second
+time when the tag fallback did not resolve it -- cannot tell a lost boundary
+from a component's *first* release, which legitimately replays everything to
+build its first changelog. A cap firing on that would truncate a changelog
+with no warning anywhere, which is the failure this repository dislikes most.
+Reading the walk once and serving its file lists locally removes the cost the
+cap was for.
+
 ## Bundling breaks things no unit test sees
 
 Three times now, and always the same shape: a dependency's ordinary runtime
