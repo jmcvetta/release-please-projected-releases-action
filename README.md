@@ -58,22 +58,22 @@ Copy to `.github/workflows/projected-releases.yml`:
 name: Projected releases
 on:
   pull_request:
-    # `edited` matters: the projection comes from the title.
     types: [opened, reopened, synchronize, edited]
 permissions:
   contents: read
-  pull-requests: write   # the sticky comment only
+  pull-requests: write
 jobs:
   preview:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0   # the diff runs from the merge base
+          fetch-depth: 0
       - uses: jmcvetta/release-please-projected-releases-action@v0
 ```
 
-`@v0` tracks the latest `0.x`.
+Keep `edited` in the trigger list: the projection comes from the title, so a
+title fixed after review has to re-render. `@v0` tracks the latest `0.x`, and
 [`examples/projected-releases.yml`](examples/projected-releases.yml) adds a
 `concurrency` group and skips release-please's own release pull requests.
 
