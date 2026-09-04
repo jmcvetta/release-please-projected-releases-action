@@ -95,15 +95,102 @@ describe("the table", () => {
     expect(out.indexOf("| Package |")).toBeLessThan(out.indexOf("<details>"));
   });
 
-  // A package that releases nothing is not noise: its row is the evidence
-  // that it was considered and came out unchanged.
-  it("keeps a row for every configured package", () => {
+  // The rows a pull request has nothing to do with grow with the repository
+  // rather than with the change: a twenty-package monorepo got eighteen rows
+  // of em dashes around the two that answer the question.
+  it("drops a package the pull request neither touches nor releases", () => {
     const out = body(
       projection({
         projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
       }),
     );
-    expect(out).toContain("| `acme-ui` | `ui` | — | 1.0.0 | — | — | — |");
+    expect(out).toContain("| `acme-api` |");
+    expect(out).not.toContain("| `acme-ui` |");
+  });
+
+  // Considered-and-unchanged is a real thing to say. It is worth one line.
+  it("accounts for the dropped packages in one line below the table", () => {
+    const out = body(
+      projection({
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
+    );
+    expect(out).toContain("_1 other package unchanged: `acme-ui`._");
+    expect(out.indexOf("| `acme-api` |")).toBeLessThan(
+      out.indexOf("other package unchanged"),
+    );
+  });
+
+  it("names the unchanged packages while there are few of them", () => {
+    const out = body(
+      projection({
+        packages: [
+          API,
+          UI,
+          { ...UI, path: "docs", component: "acme-docs", releaseComponent: "acme-docs" },
+        ],
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
+    );
+    expect(out).toContain("_2 other packages unchanged: `acme-ui`, `acme-docs`._");
+  });
+
+  // The point of the line is a length that does not follow the repository,
+  // so past a handful the names go and the count stays.
+  it("counts them instead once there are many", () => {
+    const extras = Array.from({ length: 6 }, (_, i) => ({
+      ...UI,
+      path: `p${i}`,
+      component: `acme-p${i}`,
+      releaseComponent: `acme-p${i}`,
+    }));
+    const out = body(
+      projection({
+        packages: [API, ...extras],
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
+    );
+    expect(out).toContain("_6 other packages unchanged._");
+    expect(out).not.toContain("`acme-p0`");
+  });
+
+  // A release the merge does not move still belongs in the table: the row is
+  // what says this pull request rides along with it.
+  it("keeps a package whose release this pull request does not move", () => {
+    const out = body(
+      projection({
+        touched: new Map(),
+        files: ["docs/x.md"],
+        projected: [{ component: "acme-ui", version: "1.1.0", notes: "" }],
+        pending: [{ component: "acme-ui", version: "1.1.0", notes: "" }],
+      }),
+    );
+    expect(out).toContain("| `acme-ui` | `ui` | — | 1.0.0 | 1.1.0 | 1.1.0 |");
+    expect(out).toContain("_1 other package unchanged: `acme-api`._");
+  });
+
+  // Nothing to tabulate, so no header row over an empty body. The verdict
+  // above already says why, and the line below says what was considered.
+  it("goes away entirely when no package is affected", () => {
+    const out = body(
+      projection({ touched: new Map(), files: ["docs/x.md"] }),
+      { title: "docs: a thing" },
+    );
+    expect(out).not.toContain("| Package |");
+    expect(out).toContain("_2 packages unchanged: `acme-api`, `acme-ui`._");
+  });
+
+  // Whether **Path** earns a column is a fact about the repository. A
+  // heading that came and went with the files a pull request happens to
+  // touch would read as a different table each time.
+  it("keeps Path when a dropped package disagrees on it", () => {
+    const out = body(
+      projection({
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
+    );
+    expect(out).toContain("| Package | Path | Files |");
+    expect(out).toContain("| `acme-api` | `api` |");
   });
 
   // "Which of these packages claimed the file" is not a question a
@@ -260,7 +347,7 @@ describe("saying that nothing releases", () => {
     expect(out).toContain("no changed file is under a package path");
     expect(out).toContain("`job-descriptions`");
     expect(out).toContain("`pipeline.json`");
-    expect(out).toContain("| `acme-api` | `api` | — | 2.4.1 | — | — |");
+    expect(out).toContain("_2 packages unchanged: `acme-api`, `acme-ui`._");
   });
 
   it("blames the type when a package is touched but nothing releases", () => {

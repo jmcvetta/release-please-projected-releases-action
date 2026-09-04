@@ -62021,13 +62021,21 @@ function renderProjection(projection, options) {
   const unmoved = rows.filter(
     (r) => r.projected !== void 0 && r.projected.version === r.pending?.version && touched.has(r.pkg.releaseComponent)
   );
+  const shown = rows.filter(affected);
+  const dropped = rows.filter((r) => !affected(r));
   const said = verdict(projection, options, moved, unmoved, touchedPackages);
   const out = [
     "## Projected releases",
     "",
     ...said ? [said, ""] : [],
-    ...table(rows, options)
+    // Columns are decided by every row, not just the shown ones: whether
+    // **Path** is worth a column is a fact about the repository, and a
+    // heading that comes and goes with the files a pull request happens to
+    // touch reads as a different table each time.
+    ...shown.length > 0 ? table(shown, rows, options) : []
   ];
+  const line = coverage(dropped, shown.length > 0);
+  if (line) out.push("", line);
   const byComponent = groupBy(projection.packages, (p) => p.releaseComponent);
   const shared = new Set(
     [...byComponent].filter(([, list]) => list.length > 1).map(([c]) => c)
@@ -62088,8 +62096,8 @@ function buildRows(projection) {
   }));
   return { rows: [...rows, ...invented], unmatched };
 }
-function table(rows, options) {
-  const showPath = new Set(rows.map((r) => r.pkg.path)).size > 1;
+function table(rows, all, options) {
+  const showPath = new Set(all.map((r) => r.pkg.path)).size > 1;
   const showTag = rows.some(
     (r) => r.projected !== void 0 && tagFor(r.pkg, r.projected.version) !== `v${r.projected.version}`
   );
@@ -62120,6 +62128,17 @@ function table(rows, options) {
     out.push(`| ${cells.join(" | ")} |`);
   }
   return out;
+}
+function affected(row) {
+  return row.files.length > 0 || row.projected !== void 0 || row.pending !== void 0;
+}
+var NAMED_UNCHANGED = 3;
+function coverage(dropped, others) {
+  if (dropped.length === 0) return void 0;
+  const noun = dropped.length === 1 ? "package" : "packages";
+  const subject = `${dropped.length}${others ? " other" : ""} ${noun}`;
+  const names = dropped.length <= NAMED_UNCHANGED ? `: ${dropped.map((r) => code(r.pkg.component)).join(", ")}` : "";
+  return `_${subject} unchanged${names}._`;
 }
 function projectedCell(row) {
   const version = row.projected?.version;

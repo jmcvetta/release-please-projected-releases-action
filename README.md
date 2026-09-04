@@ -27,7 +27,8 @@ on a two-package repository, where a `feat:` title touches only one of them:
 | Package | Path | Files | Current | Without this PR | Projected | Tag |
 | --- | --- | --- | --- | --- | --- | --- |
 | `acme-api` | `api` | 3 | 2.4.1 | 2.4.2 | **2.5.0** | `acme-api@v2.5.0` |
-| `acme-ui` | `ui` | — | 1.0.0 | — | — | — |
+
+_1 other package unchanged: `acme-ui`._
 
 <details><summary>Changelog preview</summary>
 
@@ -57,16 +58,20 @@ repository-root file belongs to none.
 
 The comment's own heading is one level up from the one shown here.
 
-The table is the whole answer, so it is never collapsed and every package
-gets a row — including the ones that did not move, which is what makes the
-comparison a comparison.
+The table is the whole answer, so it is never collapsed. A package gets a row
+when the pull request changed a file under it, or when either pass projects a
+release for it — including a release the merge does not move, which is what
+makes the comparison a comparison. The packages left over are counted in the
+line below the table, named while there are few of them, so the comment's
+length follows the change rather than the repository.
 
 Two columns appear only when they say something the others do not. **Tag**
 is there when a tag carries its package's component, which
 `include-component-in-tag` and `tag-separator` decide and nothing else in the
 row predicts; without one a tag is `v` and the version, so the column would
-repeat **Projected** on every line. **Path** is there when the rows disagree
-on it, so a single-package repository does not carry a column of `.`.
+repeat **Projected** on every line. **Path** is there when the repository's
+packages disagree on it, so a single-package repository does not carry a
+column of `.`.
 
 A line appears above the table only when no row can answer — `None — \`docs\`
 is a hidden type.` A merge that does release gets no line, because the row

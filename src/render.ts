@@ -1,13 +1,16 @@
 /**
  * render writes the sticky comment body.
  *
- * It is tool output, not a message: one table carrying every package's
- * numbers and tag — the ones that moved and the ones that did not — and only
- * the notes needed to read it. A line above the table says why nothing
- * releases, which no row can; when something does release, the row says it
- * all and there is no line. Most pull requests in a repository like this one
- * release nothing at all, so "nothing will be released" is stated as an
- * answer rather than left as silence.
+ * It is tool output, not a message: one table carrying the numbers and tag of
+ * every package this pull request affects — and only the notes needed to read
+ * it. A line above the table says why nothing releases, which no row can; when
+ * something does release, the row says it all and there is no line. Most pull
+ * requests in a repository like this one release nothing at all, so "nothing
+ * will be released" is stated as an answer rather than left as silence.
+ *
+ * Packages the pull request neither touches nor releases are accounted for in
+ * one line below the table rather than one row each, so the comment's length
+ * follows the change rather than the repository.
  *
  * The table is the work product and is never collapsed. What is collapsed is
  * genuinely secondary: the changelog preview, and the per-file listing behind
@@ -55,10 +58,8 @@ function visibleTitle(options: RenderOptions): boolean {
 /**
  * Row is one package's line in the table.
  *
- * Every configured package gets one, whether or not this pull request moves
- * it. A row with no release at all is not noise: it is the evidence that the
- * package was considered and came out unchanged, which is the whole answer
- * on the common pull request.
+ * A row is built for every configured package, but only the ones this pull
+ * request has something to do with are rendered: see `affected`.
  */
 interface Row {
   pkg: PackageConfig;
@@ -178,13 +179,25 @@ function renderProjection(
       touched.has(r.pkg.releaseComponent),
   );
 
+  // The table answers "what does merging this cut", so it holds the rows that
+  // bear on the merge. The rest are counted once, below.
+  const shown = rows.filter(affected);
+  const dropped = rows.filter((r) => !affected(r));
+
   const said = verdict(projection, options, moved, unmoved, touchedPackages);
   const out = [
     "## Projected releases",
     "",
     ...(said ? [said, ""] : []),
-    ...table(rows, options),
+    // Columns are decided by every row, not just the shown ones: whether
+    // **Path** is worth a column is a fact about the repository, and a
+    // heading that comes and goes with the files a pull request happens to
+    // touch reads as a different table each time.
+    ...(shown.length > 0 ? table(shown, rows, options) : []),
   ];
+
+  const line = coverage(dropped, shown.length > 0);
+  if (line) out.push("", line);
 
   const byComponent = groupBy(projection.packages, (p) => p.releaseComponent);
   const shared = new Set(
@@ -279,9 +292,9 @@ function buildRows(projection: Projection): {
 }
 
 /**
- * table is the comment's work product: one row per package, carrying the
- * numbers rather than a sentence describing the difference between two of
- * them.
+ * table is the comment's work product: one row per package the pull request
+ * affects, carrying the numbers rather than a sentence describing the
+ * difference between two of them.
  *
  * **Tag** appears only where a tag carries its package's component, which is
  * the case this action exists to show: `include-component-in-tag` and
@@ -303,8 +316,12 @@ function buildRows(projection: Projection): {
  * fails, so the cell links a standing pull request only when one was found
  * and otherwise just states the version.
  */
-function table(rows: readonly Row[], options: RenderOptions): string[] {
-  const showPath = new Set(rows.map((r) => r.pkg.path)).size > 1;
+function table(
+  rows: readonly Row[],
+  all: readonly Row[],
+  options: RenderOptions,
+): string[] {
+  const showPath = new Set(all.map((r) => r.pkg.path)).size > 1;
   // Asked of the tags actually rendered, not of the configuration: a package
   // that would tag with its component but has no projected release spells no
   // tag in this table, and a column of em dashes says nothing at all.
@@ -342,6 +359,52 @@ function table(rows: readonly Row[], options: RenderOptions): string[] {
     out.push(`| ${cells.join(" | ")} |`);
   }
   return out;
+}
+
+/**
+ * affected reports whether a row bears on this pull request at all.
+ *
+ * Either the pull request changed a file the package claimed, or one of the
+ * two passes projects a release for it — which includes a release the merge
+ * does not move, since the row is then what says the pull request rides
+ * along with it.
+ *
+ * A package that answers to neither is inventory. Its row was once defended
+ * as the evidence that it was considered and came out unchanged, and that is
+ * a real thing to say; it is worth one line, not one line per package. On a
+ * twenty-package monorepo the defence bought eighteen rows of em dashes
+ * around the two that answer the question the comment exists to answer.
+ */
+function affected(row: Row): boolean {
+  return (
+    row.files.length > 0 ||
+    row.projected !== undefined ||
+    row.pending !== undefined
+  );
+}
+
+/** NAMED_UNCHANGED is how many unchanged packages the coverage line will
+ * name before it just counts them. Naming them is worth more than the
+ * count while the list stays shorter than the rows it replaced. */
+const NAMED_UNCHANGED = 3;
+
+/**
+ * coverage is the one line accounting for the packages the table drops.
+ *
+ * It states the same thing their rows did — considered, unchanged — at a
+ * length that does not grow with the repository. `others` distinguishes the
+ * pull request that moves some packages from the one that moves none, where
+ * "other" would be counting against nothing.
+ */
+function coverage(dropped: readonly Row[], others: boolean): string | undefined {
+  if (dropped.length === 0) return undefined;
+  const noun = dropped.length === 1 ? "package" : "packages";
+  const subject = `${dropped.length}${others ? " other" : ""} ${noun}`;
+  const names =
+    dropped.length <= NAMED_UNCHANGED
+      ? `: ${dropped.map((r) => code(r.pkg.component)).join(", ")}`
+      : "";
+  return `_${subject} unchanged${names}._`;
 }
 
 /** projectedCell is the version merging this pull request leads to, bold only
