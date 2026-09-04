@@ -11,12 +11,39 @@ merging it will cut — or says plainly that nothing is released.
 - **Read-only.** The default `GITHUB_TOKEN` is enough; no App identity needed.
 - The answer comes from **release-please itself**, not a reimplementation.
 
+## Quick start
+
 ```yaml
-- uses: actions/checkout@v7
-  with:
-    fetch-depth: 0
-- uses: jmcvetta/release-please-projected-releases-action@v0
+name: Projected releases
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+concurrency:
+  group: projected-releases-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.event.pull_request.head.ref, 'release-please--') }}
+    permissions:
+      contents: read        # release-please's reads
+      pull-requests: write  # the sticky comment only
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: jmcvetta/release-please-projected-releases-action@v0
 ```
+
+Four lines are load-bearing:
+
+- **`edited`** — the projection comes from the title; a title fixed after
+  review has to re-render.
+- **`concurrency`** — an edit and a push can race the sticky comment.
+- **`fetch-depth: 0`** — the diff runs from the merge base. Shallow falls back
+  to the API, capped at 3000 files.
+- **the `if:`** — a release pull request cuts its tag from the manifest, not
+  the title, so the projection would be wrong about it.
 
 `@v0` tracks the latest `0.x`; pin a full version if a minor bump changing
 behaviour would bother you.
@@ -47,13 +74,9 @@ _1 other package unchanged: `acme-ui`._
 
 <details><summary>Matched files</summary>
 
-`acme-api` matched:
-- `api/src/webhook.ts`
-- `api/src/verify.ts`
-- `api/test/webhook.test.ts`
-
-A file belongs to the package with the longest matching path; a
-repository-root file belongs to none.
+`acme-api` matched `api/src/webhook.ts`, `api/src/verify.ts`,
+`api/test/webhook.test.ts` — a file belongs to the package with the longest
+matching path, and a repository-root file to none.
 
 </details>
 
@@ -61,75 +84,65 @@ repository-root file belongs to none.
 
 ---
 
-A package gets a row when the pull request changed a file under it, or when
-either pass projects a release for it. The rest are counted below the table.
-The **Package**, **Path** and **Tag** columns appear only when they say
-something the other columns do not.
-
-When nothing releases, a line replaces the table entirely — ``None — `docs:`
-produces no release.`` — and there is no table under it.
+A package gets a row when the pull request touched it or when either pass
+projects a release for it; the rest are counted underneath. **Package**,
+**Path** and **Tag** appear only when they add something. When nothing
+releases there is no table at all, just ``None — `docs:` produces no
+release.``
 
 ## Why
 
-Two invisible things decide what a merge releases: which release-please
-packages the changed files belong to, and the Conventional Commit type in the
-**title**, which only becomes a commit subject at squash time. Getting either
-wrong is quiet — a stray `feat!:` cuts a major version, noticed after the
-merge.
+Two invisible things decide what a merge releases: which packages the changed
+files belong to, and the Conventional Commit type in the **title**, which only
+becomes a commit subject at squash time. Neither is visible while reviewing,
+and getting either wrong is quiet — a stray `feat!:` cuts a major version,
+noticed after the merge.
 
-## Assumptions
+Squash-merge is therefore assumed. The action reads the repository's merge
+settings and says so in the comment when they would not produce the single
+commit it projects from.
 
-**Squash-merge**, which is the whole premise: a squashed pull request
-contributes exactly one Conventional Commit, and it is the title. The action
-reads the repository's merge settings and says so in the comment rather than
-projecting the wrong thing.
+## Manifest mode and plain mode
 
-**Either release-please mode.** With a `release-please-config.json` and
-`.release-please-manifest.json` in the checkout it reads those; without them,
-set `release-type` and it configures the projection from the inputs, taking
-the current version from the latest tag.
+A `release-please-config.json` and `.release-please-manifest.json` in the
+checkout are read as-is; nothing to configure. Without them, pass the same
+`release-type` your release workflow does:
 
-Everything else — components, tag separators, `changelog-sections`, prerelease
-versions, `Release-As` — is release-please's own behaviour, reached through
-release-please.
+```yaml
+      - uses: jmcvetta/release-please-projected-releases-action@v0
+        with:
+          release-type: node
+```
+
+`package-path`, `component`, `include-component-in-tag` and `tag-separator`
+go with it and default to single-package conventions.
 
 ## Inputs
 
 Everything about the pull request defaults to the webhook payload, so the
-ordinary caller sets nothing. Full list in [`action.yml`](action.yml).
+ordinary caller sets nothing. Full list with defaults in
+[`action.yml`](action.yml).
 
 | Input | Default | What it is for |
 | --- | --- | --- |
-| `token` | `github.token` | `contents: read`, plus `pull-requests: write` for the comment. |
+| `token` | `github.token` | Needs `contents: read`, plus `pull-requests: write` to comment. |
 | `mode` | `render-and-comment` | `render` writes the file and outputs only; `comment` posts a body an earlier job rendered. The two halves of the fork-safe arrangement. |
-| `changed-files` | `auto` | `auto` diffs the checkout and falls back to the API when it is too shallow; `git` insists; `api` skips the checkout. |
+| `changed-files` | `auto` | `auto` diffs the checkout and falls back to the API (3000 files max) when it is too shallow; `git` insists; `api` skips the checkout. |
 | `merge-method` | `auto` | `auto` reads the repository's settings. Set it to skip that read. |
+| `release-type` | _unset_ | Plain mode; see above. Empty means manifest mode. |
 | `visible-types` / `hidden-types` | resolved | Force the changelog type list when `changelog-sections` does not describe it. |
-| `config-file` / `manifest-file` | release-please's | Where the config and manifest live, in manifest mode. |
-| `release-type` | _unset_ | Set it for plain mode. `package-path`, `component`, `include-component-in-tag` and `tag-separator` go with it. |
+| `link-release-prs` | `true` | Lists open pull requests so a pending version links to the release pull request holding it. Costs `pull-requests: read`; set false to skip the call rather than grant it. |
 | `comment-header` | `projected-releases` | Identifies the sticky comment. Change it only to keep two invocations apart. |
 
 ## Outputs
 
 `comment-file`, `body`, `releases` (JSON, one `{component, version, notes}`
-per tag), `releases-count`, `malformed-title`, and `recognized-types`.
+per tag), `releases-count`, `malformed-title` (`true` when the title is not a
+Conventional Commit the changelog recognizes), and `recognized-types`.
 
-Feed `recognized-types` to a PR-title gate rather than writing the list down
-twice: too strict red-lights a title that would have released correctly, too
-loose lets a commit through that the changelog silently omits.
-
-## Permissions
-
-```yaml
-permissions:
-  contents: read        # release-please's reads
-  pull-requests: write  # the sticky comment only
-```
-
-A job that only renders (`mode: render`) needs `pull-requests: read` instead,
-so the pending version can link to the release pull request holding it.
-Without it, every run carries a warning annotation; `link-release-prs: false`
-drops the requirement.
+Feed `recognized-types` to a PR-title gate rather than keeping a second copy
+of the list: too strict red-lights a title that would have released correctly,
+too loose lets a commit through that the changelog silently omits.
 
 ## Fork pull requests
 
@@ -137,59 +150,35 @@ A `pull_request` event from a fork gets a read-only token, so the comment
 cannot be posted from that run. The action says so and leaves the projection
 in the job summary rather than failing.
 
-To comment anyway, use the `workflow_run` pair in [`examples/`](examples): one
-workflow renders the markdown under the fork's read-only token and uploads it,
-and a second — running from your default branch — posts it. Deliberately not
-`pull_request_target`, which would run the head's code with a write token. The
-posting job resolves the pull request number from the API rather than the
-artifact, since a fork controls what it uploads.
-
-## Examples
-
-- [`examples/projected-releases.yml`](examples/projected-releases.yml) — the
-  ordinary arrangement.
-- [`examples/fork-safe-render.yml`](examples/fork-safe-render.yml) +
-  [`examples/fork-safe-comment.yml`](examples/fork-safe-comment.yml) — the
-  fork-safe pair.
-
-Skip release-please's own release pull requests, as those examples do: merging
-one cuts its tag from the manifest already in the branch, never from the
-title, so this action would report "nothing releases" about the one merge that
-always releases.
+To comment anyway, copy the `workflow_run` pair:
+[`fork-safe-render.yml`](examples/fork-safe-render.yml) renders under the
+fork's read-only token and uploads the markdown,
+[`fork-safe-comment.yml`](examples/fork-safe-comment.yml) runs from your
+default branch and posts it. Deliberately not `pull_request_target`, which
+would run the head's code with a write token; and the posting job takes the
+pull request number from the API, never from the artifact a fork controls.
 
 ## Command line
 
-The bundle is also a command line, so a projection can be had before the pull
-request exists:
+The bundle is also a command line, for a projection before the pull request
+exists — same configuration, same markdown:
 
 ```
 node dist/index.mjs --title "feat: a thing" --repo owner/name --base main --out preview.md
 ```
 
-Same configuration, same markdown.
-
 ## Compatibility
 
-The action bundles release-please pinned to an exact version, currently
-`release-please@17.11.2`, so the projection is computed by that version rather
-than whichever your release workflow runs. Nothing has to match, but
-projections across different majors can disagree.
+The action bundles `release-please@17.11.2`, so the projection is computed by
+that version rather than whichever your release workflow runs. Nothing has to
+match, but different majors can disagree.
 
 ## Contributing
 
-Issues and pull requests welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the
-build, test layout, and release process; [SECURITY.md](SECURITY.md) has how to
-report a vulnerability privately. How the projection is computed is documented
-at the code — start with the header comment of `src/pr-view.ts`.
+Issues and pull requests welcome — [CONTRIBUTING.md](CONTRIBUTING.md) has the
+build and tests, [SECURITY.md](SECURITY.md) how to report a vulnerability
+privately.
 
 ## License
 
-Copyright (C) 2026 Jason McVetta.
-
-This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or (at your option) any later
-version. It is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-A PARTICULAR PURPOSE. See the [GNU General Public License](LICENSE) for more
-details.
+Copyright (C) 2026 Jason McVetta. GPL-3.0-or-later — see [LICENSE](LICENSE).
