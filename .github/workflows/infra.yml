@@ -15,8 +15,9 @@
 # from the registry, on every push, for a directory that changes a few times a
 # year.
 #
-# The filter is the leg's real input set rather than its directory: package.json
-# holds the `check:infra` command line, and this file holds everything else.
+# The filter is the leg's real input set rather than its directory: `tofu
+# validate` reads infra/**, and package.json holds the `check:infra` command
+# line. Not this file -- nothing here reads it.
 #
 # Safe to gate this way only because `infra` is not a required check. The
 # ruleset requires `validate-title` and nothing else, and that workflow carries
@@ -33,12 +34,10 @@ on:
     paths:
       - infra/**
       - package.json
-      - .github/workflows/infra.yml
   pull_request:
     paths:
       - infra/**
       - package.json
-      - .github/workflows/infra.yml
 
 permissions:
   contents: read
