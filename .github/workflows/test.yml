@@ -94,7 +94,7 @@ jobs:
       # contributor cannot fix. The coverage report is still in the log above.
       #
       # MIT-licensed.
-      - name: Comment the coverage this change leaves
+      - name: Coverage comment
         if: >-
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository
