@@ -80,10 +80,11 @@ title fixed after review has to re-render. `@v0` tracks the latest `0.x`, and
 
 ## Configuration
 
-Repositories with a `release-please-config.json` need none.
+None, where release-please reads `release-please-config.json` and
+`.release-please-manifest.json` from the repository.
 
-Without one, release-please is configured by the `release-type:` your release
-workflow passes it. Pass this action the same value:
+Without those files, release-please is configured by the `release-type:` your
+release workflow passes it. Pass this action the same value:
 
 ```yaml
       - uses: jmcvetta/release-please-projected-releases-action@v0
