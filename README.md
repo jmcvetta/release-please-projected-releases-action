@@ -90,15 +90,6 @@ workflow passes it. Pass this action the same value:
           release-type: node
 ```
 
-## Command line
-
-The same bundle is a command line, for a projection before the pull request
-exists:
-
-```
-node dist/index.mjs --title "feat: a thing" --repo owner/name --base main --out preview.md
-```
-
 ## License
 
 Copyright (C) 2026 Jason McVetta. GPL-3.0-or-later — see [LICENSE](LICENSE).
