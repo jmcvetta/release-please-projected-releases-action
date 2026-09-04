@@ -13,10 +13,9 @@
 # `conventional-changelog-conventionalcommits`, which is what release-please
 # writes notes with while this repository declares no `changelog-sections` --
 # the same list conventional-types.json holds and src/conventional.ts falls
-# back to. src/pr-title-check.test.ts pins the two together in both directions,
-# because both failures are quiet: too strict red-lights a title that would
-# have released correctly, too loose lets a commit onto master that the
-# changelog silently omits.
+# back to. Nothing keeps the two equal, so keep them equal by hand. Both drifts
+# are quiet: too strict red-lights a title that would have released correctly,
+# too loose lets a commit onto master that the changelog silently omits.
 #
 # Rejecting anything outside that list is the point, and the two ways a
 # rejected title fails are both silent. `wip:` and `hotfix:` match no entry in

@@ -89,10 +89,10 @@ the type in the title is what decides whether a merge releases anything and by
 how much. `.github/workflows/pr-title-check.yml` checks it against the same
 list `conventional-types.json` holds — the `conventional-changelog-conventionalcommits`
 defaults, not the Angular list the enforcing action defaults to, which omits
-`feature`. `src/pr-title-check.test.ts` pins the two together in both
-directions; a gate missing a type red-lights a title that would have released
-correctly, and a gate carrying an extra one lets a commit onto `master` that
-the changelog then omits without a word.
+`feature`. Nothing keeps the two lists equal, so keep them equal by hand: a
+gate missing a type red-lights a title that would have released correctly, and
+a gate carrying an extra one lets a commit onto `master` that the changelog
+then omits without a word.
 
 The workflow then moves `v<major>` and `v<major>.<minor>` onto that tag,
 because an action is pinned by its major and release-please writes only the

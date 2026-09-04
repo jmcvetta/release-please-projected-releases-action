@@ -193,8 +193,8 @@ trailer below it, before confirming the merge.
 
 `.github/workflows/pr-title-check.yml` runs
 `amannn/action-semantic-pull-request` over the title, and
-`src/pr-title-check.test.ts` pins its `types:` list to
-`conventional-types.json` in both directions. That action's own default is
+its `types:` list is the one `conventional-types.json` holds. Nothing keeps
+the two equal; keep them equal by hand. That action's own default is
 the Angular `conventional-commit-types` list, which is a **near-miss rather
 than a wrong list**: it omits `feature`, which release-please treats as a
 synonym for `feat` in both the versioning strategy and the changelog preset.
@@ -216,8 +216,8 @@ Actions job, its `name:` when it declares one and its job id otherwise -- so
 `infra/github/main.tf` and the workflow hold one pair in two languages, and
 renaming either alone leaves a required check nothing ever reports: pending
 forever, blocking every pull request, fixable only by someone applying the
-stack by hand. `src/pr-title-check.test.ts` pins that pair too, from both
-ends.
+stack by hand. Nothing tests that pair -- check it by hand when renaming either
+side.
 
 **The cost lands on the release pull request, and it is real.** GitHub
 suppresses workflow events for everything the default token pushes, and
@@ -297,8 +297,23 @@ all, and a required check that never reports leaves every pull request pending
 forever. The ruleset does now require `validate-title` (see above), and that
 resolved this the second way the sentence used to offer: the filter stayed on
 and `infra` stayed out of the required set. Requiring it later means dropping
-the filter in the same commit, and `src/pr-title-check.test.ts` fails on the
-combination rather than letting a blocked pull request report it.
+the filter in the same commit. Nothing enforces that.
+
+**`test.yml` is filtered too**, as a `paths:` allow-list of the files these
+tests read rather than a list of directories to ignore: an ignore-list states
+what a leg is bored by, an allow-list states what it consumes. It is longer
+than `src/**` because two tests reach outside it -- `bundle.test.ts` runs
+`dist/index.mjs` as a process and `packaging.test.ts` reads `action.yml` --
+plus what typecheck, build and install consume.
+
+The cost of an allow-list is that it does not fail safe. **Nothing reports an
+input left off the list**; it is simply a file this workflow stops running on.
+Extend the list when a test starts reading something new.
+
+Both filters are written once per event, because GitHub Actions does not read
+YAML anchors. Keep the halves the same: a drift between them is invisible on a
+pull request and surfaces later as a merge to `master` that skipped the leg the
+pull request ran.
 
 
 ## A variant entry point calls the original; it never copies it

@@ -11,10 +11,48 @@
 # a script of its own, so the thing CI measures stays the thing a laptop runs.
 name: Test
 
+# `paths:` lists what this suite reads, and nothing else -- not infra/**, the
+# prose, examples/**, the Makefile, or any workflow, this one included. GitHub
+# evaluates the filter before allocating a runner, and runs the workflow when
+# any changed file matches.
+#
+# Wider than src/** because two tests reach outside it: bundle.test.ts runs
+# dist/index.mjs as a process and packaging.test.ts reads action.yml. The rest
+# is what typecheck, build and install consume. Extend the list when a test
+# starts reading something new -- nothing reports an input left off it.
+#
+# Only safe while `test` is not a required check. A path-filtered workflow
+# reports no check run rather than a skipped one, so a required context naming
+# this job would block every pull request that matches nothing above. Requiring
+# it means dropping the filter in the same commit.
+
 on:
   push:
     branches: [master]
+    # Repeated under pull_request: GitHub Actions does not read YAML anchors.
+    paths:
+      - src/**
+      - dist/**
+      - scripts/bundle.mjs
+      - action.yml
+      - conventional-types.json
+      - package.json
+      - package-lock.json
+      - tsconfig.json
+      - tsconfig.test.json
+      - vitest.config.ts
   pull_request:
+    paths:
+      - src/**
+      - dist/**
+      - scripts/bundle.mjs
+      - action.yml
+      - conventional-types.json
+      - package.json
+      - package-lock.json
+      - tsconfig.json
+      - tsconfig.test.json
+      - vitest.config.ts
 
 permissions:
   contents: read
