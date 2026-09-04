@@ -15,18 +15,18 @@ name: Test
 # worth asking is what these tests read, not which directory they are bored by.
 # Ignoring infra/ still ran the whole suite for a change to CLAUDE.md.
 #
-# The list is the suite's input set, and it is longer than src/ because the
-# tests reach outside it: bundle.test.ts runs dist/index.mjs as a process,
-# packaging.test.ts reads action.yml and package.json, coverage.test.ts and
-# pr-title-check.test.ts read two of the workflows, and conventional.ts falls
-# back to conventional-types.json. The rest are what typecheck, build and
-# install consume. Add to it when a test starts reading something new -- an
-# input that is not here is one this workflow does not run on, and nothing
-# reports that.
+# The list is the suite's input set, and it is longer than src/ because two
+# tests reach outside it: bundle.test.ts runs dist/index.mjs as a process and
+# packaging.test.ts reads action.yml, while conventional.ts falls back to
+# conventional-types.json. The rest are what typecheck, build and install
+# consume. Add to it when a test starts reading something new -- an input that
+# is not here is one this workflow does not run on, and nothing reports that.
 #
 # What is deliberately absent: infra/**, the prose (README, CLAUDE.md,
-# CONTRIBUTING, SECURITY, CHANGELOG), examples/**, the Makefile, and the
-# workflows no test reads. GitHub evaluates this before allocating a runner and
+# CONTRIBUTING, SECURITY, CHANGELOG), examples/**, the Makefile, and every
+# workflow but this one. This suite tests the action, so nothing it contains
+# has an opinion about a workflow -- this file is here only because a change
+# to it changes what runs. GitHub evaluates this before allocating a runner and
 # starts the workflow when *any* changed file matches, so a pull request
 # touching src/ and CLAUDE.md together still runs everything here.
 #
@@ -53,7 +53,6 @@ on:
       - tsconfig.json
       - tsconfig.test.json
       - vitest.config.ts
-      - .github/workflows/pr-title-check.yml
       - .github/workflows/test.yml
   pull_request:
     paths:
@@ -67,7 +66,6 @@ on:
       - tsconfig.json
       - tsconfig.test.json
       - vitest.config.ts
-      - .github/workflows/pr-title-check.yml
       - .github/workflows/test.yml
 
 permissions:

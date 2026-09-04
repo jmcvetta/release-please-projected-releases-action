@@ -193,8 +193,9 @@ trailer below it, before confirming the merge.
 
 `.github/workflows/pr-title-check.yml` runs
 `amannn/action-semantic-pull-request` over the title, and
-`src/pr-title-check.test.ts` pins its `types:` list to
-`conventional-types.json` in both directions. That action's own default is
+its `types:` list is the one `conventional-types.json` holds. Nothing keeps
+them equal -- the test suite is the action's, and the title gate is not the
+action -- so keep them equal by hand. That action's own default is
 the Angular `conventional-commit-types` list, which is a **near-miss rather
 than a wrong list**: it omits `feature`, which release-please treats as a
 synonym for `feat` in both the versioning strategy and the changelog preset.
@@ -310,10 +311,9 @@ directories to ignore. The ignore-list came first and was wrong in the ordinary
 way: it named `infra/**`, so a pull request changing only `CLAUDE.md` still ran
 the whole suite. What a leg needs is stated by what it consumes.
 
-The list is longer than `src/**`, because the tests reach outside it:
-`bundle.test.ts` runs `dist/index.mjs` as a process, `packaging.test.ts` reads
-`action.yml` and `package.json`, `coverage.test.ts` and `pr-title-check.test.ts`
-read two of the workflows, and `conventional.ts` falls back to
+The list is longer than `src/**`, because two tests reach outside it:
+`bundle.test.ts` runs `dist/index.mjs` as a process and `packaging.test.ts`
+reads `action.yml`, while `conventional.ts` falls back to
 `conventional-types.json`. Add to the list when a test starts reading something
 new. **Nothing reports the omission**: an input that is not in the list is one
 this workflow does not run on, which is the cost of an allow-list and the
