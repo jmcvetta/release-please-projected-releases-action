@@ -68,7 +68,13 @@ describe("the verdict line", () => {
 
   // Why nothing releases is nowhere in a row, so it gets the line.
   it("says why when nothing releases, above the table", () => {
-    const out = body(projection(), { title: "docs: a thing" });
+    const out = body(
+      projection({
+        projected: [{ component: "acme-ui", version: "1.1.0", notes: "" }],
+        pending: [{ component: "acme-ui", version: "1.1.0", notes: "" }],
+      }),
+      { title: "docs: a thing" },
+    );
     expect(out.indexOf("None —")).toBeLessThan(out.indexOf("| Package |"));
   });
 });
@@ -169,15 +175,39 @@ describe("the table", () => {
     expect(out).toContain("_1 other package unchanged: `acme-api`._");
   });
 
-  // Nothing to tabulate, so no header row over an empty body. The verdict
-  // above already says why, and the line below says what was considered.
+  // Nothing to tabulate, so no header row over an empty body.
   it("goes away entirely when no package is affected", () => {
     const out = body(
       projection({ touched: new Map(), files: ["docs/x.md"] }),
       { title: "docs: a thing" },
     );
     expect(out).not.toContain("| Package |");
-    expect(out).toContain("_2 packages unchanged: `acme-api`, `acme-ui`._");
+    expect(out).not.toContain("| Current |");
+  });
+
+  // Every release column an em dash top to bottom: the reader has to read
+  // the whole table to learn there was nothing in it, when the line above it
+  // already said so. Which files the package claimed is still listed under
+  // **Matched files**.
+  it("goes away when no row has a version on either side", () => {
+    const out = body(projection(), { title: "docs: a thing" });
+    expect(out).toContain("None —");
+    expect(out).not.toContain("| Package |");
+    expect(out).not.toContain("unchanged");
+    expect(out).toContain("- `api/src/x.ts`");
+  });
+
+  // A version on one side is a version to read off, even where the merge is
+  // not what moves it.
+  it("stays for a release this pull request only rides along with", () => {
+    const out = body(
+      projection({
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+        pending: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
+      { title: "docs: a thing" },
+    );
+    expect(out).toContain("| Package |");
   });
 
   // Whether **Path** earns a column is a fact about the repository. A
@@ -200,23 +230,60 @@ describe("the table", () => {
   it("drops Path when every row shares one", () => {
     const out = body(
       projection({
+        packages: [
+          { ...API, path: "." },
+          { ...UI, path: "." },
+        ],
+        touched: new Map([[".", ["x.ts"]]]),
+        files: ["x.ts"],
+        projected: [
+          { component: "acme-api", version: "2.5.0", notes: "" },
+          { component: "acme-ui", version: "1.1.0", notes: "" },
+        ],
+      }),
+    );
+    expect(out).toContain(
+      "| Package | Files | Current | Without this PR | Projected | Tag |",
+    );
+  });
+
+  // Outside a manifest release-please releases the repository, not a package
+  // in it: the name is one it derived for itself, it appears in no tag, and
+  // there is no second package to tell it from.
+  it("drops Package when there is only one to name", () => {
+    const out = body(
+      projection({
         packages: [API],
         touched: new Map([["api", ["api/src/x.ts"]]]),
         projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
       }),
     );
     expect(out).toContain(
-      "| Package | Files | Current | Without this PR | Projected | Tag |",
+      "| Files | Current | Without this PR | Projected | Tag |",
     );
-    expect(out).toContain(
-      "| `acme-api` | 1 | 2.4.1 | — | **2.5.0** | `acme-api@v2.5.0` |",
+    expect(out).not.toContain("| Package |");
+    expect(out).toContain("| 1 | 2.4.1 | — | **2.5.0** | `acme-api@v2.5.0` |");
+  });
+
+  // The name is what tells two rows apart, so it stays as soon as there is a
+  // second package -- whether or not this pull request reached it.
+  it("keeps Package when the repository has another", () => {
+    const out = body(
+      projection({
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
     );
+    expect(out).toContain("| Package | Path |");
   });
 
   it("keeps Path when the rows disagree on it", () => {
-    const out = body(projection());
+    const out = body(
+      projection({
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
+    );
     expect(out).toContain(
-      "| Package | Path | Files | Current | Without this PR | Projected |",
+      "| Package | Path | Files | Current | Without this PR | Projected | Tag |",
     );
   });
 
@@ -250,6 +317,7 @@ describe("the table", () => {
       projection({
         touched: new Map([["api", ["api/a.ts", "api/b.ts", "api/c.ts"]]]),
         files: ["api/a.ts", "api/b.ts", "api/c.ts"],
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
       }),
     );
     expect(out).toContain("| `acme-api` | `api` | 3 |");
@@ -321,18 +389,19 @@ describe("a release this pull request does not cause", () => {
   // release that is, and that it is coming at all, is the row above.
   it("credits a visible type with the changelog line it adds", () => {
     const out = body(absorbed, { title: "feat: another feature" });
-    expect(out).toContain("No version change — `feat` adds only a changelog line.");
+    expect(out).toContain("No version change — `feat:` adds only a changelog line.");
   });
 
   // Three sentences where one will do: the old comment stated the verdict,
   // then repeated it as a per-component note, then again as a warning, with
   // the 43-character branch name spelled out in two of them.
-  it("tells a hidden type it contributes nothing, once", () => {
+  it("tells a type that releases nothing it contributes nothing, once", () => {
     const out = body(absorbed, { title: "docs: a note" });
-    expect(out).toContain("No version change — `docs` is a hidden type.");
-    expect(out).not.toContain("adds no changelog line");
+    expect(out).toContain(
+      "No version change — `docs:` adds nothing to the release already coming.",
+    );
+    expect(out).not.toContain("hidden type");
     expect(out).not.toContain("stays at");
-    expect(out).not.toContain("already");
   });
 });
 
@@ -347,16 +416,21 @@ describe("saying that nothing releases", () => {
     expect(out).toContain("no changed file is under a package path");
     expect(out).toContain("`job-descriptions`");
     expect(out).toContain("`pipeline.json`");
-    expect(out).toContain("_2 packages unchanged: `acme-api`, `acme-ui`._");
   });
 
+  // The type in front of the reader, and nothing about the other types or
+  // what release-please does with them: release-please documents that, and a
+  // copy of it here is one upstream default away from being wrong.
   it("blames the type when a package is touched but nothing releases", () => {
     const out = body(projection(), { title: "docs: a thing" });
-    expect(out).toContain("None — `docs` is a hidden type.");
-    expect(out).toContain("Only `feat`");
-    // Which package it touched is a column now, not a sentence.
-    expect(out).toContain("| `acme-api` | `api` | 1 |");
-    expect(out).not.toContain("Packages touched:");
+    expect(out).toBe(
+      "## Projected releases\n\nNone — `docs:` produces no release.\n\n" +
+        "<details><summary>Matched files</summary>\n\n" +
+        "`acme-api` matched:\n- `api/src/x.ts`\n\n" +
+        "A file belongs to the package with the longest matching path; a" +
+        " repository-root file belongs to none.\n\n</details>\n\n" +
+        "<sub>Projected for re-rendered 2026-09-01 12:00 UTC</sub>\n",
+    );
   });
 
   // Another package's standing release pull request is not this one's
@@ -371,7 +445,7 @@ describe("saying that nothing releases", () => {
       }),
       { title: "docs: a thing" },
     );
-    expect(out).toContain("None — `docs` is a hidden type.");
+    expect(out).toContain("None — `docs:` produces no release.");
     expect(out).toContain(
       "| `acme-ui` | `ui` | — | 1.0.0 | 1.1.0 | 1.1.0 | `acme-ui@v1.1.0` |",
     );
@@ -382,7 +456,7 @@ describe("saying that nothing releases", () => {
   it("does not call a visible type hidden", () => {
     const out = body(projection(), { title: "feat: a thing" });
     expect(out).toContain("release-please projects no release");
-    expect(out).not.toContain("hidden type");
+    expect(out).not.toContain("produces no release");
   });
 });
 
@@ -491,10 +565,12 @@ describe("a repository whose changelog recognizes other types", () => {
     },
   });
 
-  it("explains a hidden type against that repository's visible list", () => {
+  // The repository's own type list decides what releases; naming the list
+  // back at the reader is release-please's job and it has done it.
+  it("reads a hidden type against that repository's changelog sections", () => {
     const out = body(projection(), { title: "tidy: sweep up", types });
-    expect(out).toContain("`tidy` is a hidden type");
-    expect(out).toContain("Only `ship` open a release.");
+    expect(out).toContain("None — `tidy:` produces no release.");
+    expect(out).not.toContain("`ship`");
     expect(out).not.toContain("`feat`");
   });
 
@@ -695,7 +771,11 @@ describe("the rule printed under the matched-files listing", () => {
   it("truncates a long listing rather than printing the whole diff", () => {
     const files = Array.from({ length: 14 }, (_, i) => `api/f${i}.ts`);
     const out = body(
-      projection({ touched: new Map([["api", files]]), files }),
+      projection({
+        touched: new Map([["api", files]]),
+        files,
+        projected: [{ component: "acme-api", version: "2.5.0", notes: "" }],
+      }),
     );
     expect(out).toContain("| `acme-api` | `api` | 14 |");
     expect(out).toContain("- `api/f9.ts`");
@@ -713,12 +793,28 @@ describe("the rule printed under the matched-files listing", () => {
   it("says the root package takes every file when one is", () => {
     const out = body(
       projection({
-        packages: [ROOT],
+        packages: [ROOT, API],
         touched: new Map([[".", ["README.md"]]]),
         files: ["README.md"],
       }),
     );
     expect(out).toContain("`.` takes every file besides.");
     expect(out).not.toContain("belongs to none");
+  });
+
+  // One package taking every file there is attributes nothing, so the rule
+  // describes a choice the repository never makes -- under a heading whose
+  // whole content, in a plain-mode repository, would otherwise be that rule.
+  it("states no rule where one package takes everything", () => {
+    const out = body(
+      projection({
+        packages: [ROOT],
+        touched: new Map([[".", ["README.md"]]]),
+        files: ["README.md"],
+      }),
+    );
+    expect(out).toContain("- `README.md`");
+    expect(out).not.toContain("A file belongs to the package");
+    expect(out).not.toContain("`widgets` matched:");
   });
 });

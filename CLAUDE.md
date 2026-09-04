@@ -230,6 +230,25 @@ required.
 runs it. It is not part of `npm run check`, which must not start requiring
 OpenTofu on a laptop.
 
+**It runs from its own workflow, `infra.yml`, and the reason is the `paths:`
+filter.** Nothing outside `infra/` can change what `tofu validate` says, and
+the leg is not free: setup-opentofu downloads a toolchain and `tofu init`
+fetches the provider from the registry, on every push, for a directory that
+changes a few times a year. GitHub evaluates `paths:` before allocating a
+runner, so an unaffected change starts nothing -- which a step-level `if:` or a
+gated job would not achieve, both having already paid for the runner.
+
+The filter names `package.json` and the workflow file alongside `infra/**`,
+because a filter is the leg's real input set rather than its directory:
+`package.json` holds the `check:infra` command line.
+
+This is available only because the `master` ruleset requires no status checks.
+A path-filtered workflow does not report a *skipped* check, it reports
+nothing at all, and a required check that never reports leaves every pull
+request pending forever. So the day `required_status_checks` is added -- the
+README says when -- this filter comes off, or `infra` stays out of the required
+set.
+
 
 ## A variant entry point calls the original; it never copies it
 
