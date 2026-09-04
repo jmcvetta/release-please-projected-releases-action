@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/jmcvetta/release-please-projected-releases-action/compare/v0.2.3...v0.3.0) (2026-09-04)
+
+
+### Features
+
+* warn when a component has no release boundary ([#55](https://github.com/jmcvetta/release-please-projected-releases-action/issues/55)) ([3a794e2](https://github.com/jmcvetta/release-please-projected-releases-action/commit/3a794e29a4fedf437dd95af798e60205244b3433))
+
 ## [0.2.3](https://github.com/jmcvetta/release-please-projected-releases-action/compare/v0.2.2...v0.2.3) (2026-09-04)
 
 
