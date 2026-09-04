@@ -84,6 +84,16 @@ passes `release-type: node` and there is no `release-please-config.json` or
 `package.json`. It keeps a standing release pull request; merging it writes
 `CHANGELOG.md`, bumps the version, and cuts the tag.
 
+Merges are squash-only, with the pull request title as the commit subject, so
+the type in the title is what decides whether a merge releases anything and by
+how much. `.github/workflows/pr-title-check.yml` checks it against the same
+list `conventional-types.json` holds — the `conventional-changelog-conventionalcommits`
+defaults, not the Angular list the enforcing action defaults to, which omits
+`feature`. `src/pr-title-check.test.ts` pins the two together in both
+directions; a gate missing a type red-lights a title that would have released
+correctly, and a gate carrying an extra one lets a commit onto `master` that
+the changelog then omits without a word.
+
 The workflow then moves `v<major>` and `v<major>.<minor>` onto that tag,
 because an action is pinned by its major and release-please writes only the
 exact version. Pre-1.0 that means `v0` and `v0.<minor>`, which is what the

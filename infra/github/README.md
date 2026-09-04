@@ -60,8 +60,11 @@ npm run check:infra
 It runs `tofu fmt -check`, then `tofu init -backend=false`, then
 `tofu validate`. The `-backend=false` is what keeps it credential-free:
 providers are installed for validation, and neither state nor the GitHub API is
-touched. CI runs it on every pull request, so a syntax error or an attribute
-the provider does not have fails in review.
+touched. `.github/workflows/infra.yml` runs it on every pull request that
+touches this directory, so a syntax error or an attribute the provider does not
+have fails in review. It is its own workflow so that GitHub's `paths:` filter
+can gate it: a pull request that changes only `src/` should not be paying for a
+toolchain download and a provider fetch.
 
 It is not part of `npm run check`, which is the typecheck-build-test chain a
 laptop runs constantly and which must not start requiring OpenTofu to be
@@ -120,26 +123,16 @@ exception for the one resource.
 
 ## What is not managed here, and why
 
-- **`required_status_checks` on the ruleset.** `test` is the check that should
-  be required, and requiring it now would deadlock the one pull request that
-  has to merge. GitHub suppresses workflow events for anything pushed with the
-  default token, and the release job falls back to that token, so `test` never
-  reports on the release pull request. A required check that cannot run is not
-  protection, it is a permanent block with an admin bypass in front of it.
-
-  The fix and the requirement land together: configure the release bot App
-  (below), confirm `test` runs on a release pull request, then add
-
-  ```hcl
-  required_status_checks {
-    strict_required_status_checks_policy = false
-    do_not_enforce_on_create             = false
-
-    required_check {
-      context = "test"
-    }
-  }
-  ```
+- **`test` as a required check.** `validate-title` is required (see below);
+  `test` is not, and the difference is only which cost is worth paying. GitHub
+  suppresses workflow events for anything pushed with the default token, and
+  the release job falls back to that token, so *no* check reports on the
+  release pull request — measured on #42, which has zero check runs. Requiring
+  `validate-title` therefore puts one admin-bypass click in front of every
+  release merge, which is a deliberate trade for catching a miscased type.
+  Requiring `test` as well would buy nothing more there: the release pull
+  request would still be bypassed, on the same click. It goes in when the
+  release bot App does, below, and not before.
 
   `preview` stays out of it whatever happens. That job is advisory by design
   and skips itself on release-please's own branches, so as a required check it

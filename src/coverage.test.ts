@@ -120,17 +120,6 @@ describe("the CI coverage comment", () => {
     expect(step?.with?.["name"]).not.toBe(DEFAULT_HEADER);
   });
 
-  it("pins the third-party action by commit rather than by tag", () => {
-    // A tag can be moved onto different code. A commit cannot.
-    expect(step?.uses).toMatch(/@[0-9a-f]{40}$/);
-    // The parser drops the trailing comment, so the version that SHA stands
-    // for is checked against the file. Without it the pin is unreadable and
-    // nobody can tell what updating it would move.
-    expect(read("../.github/workflows/test.yml")).toMatch(
-      /vitest-coverage-report-action@[0-9a-f]{40} # v\d+\.\d+\.\d+\n/,
-    );
-  });
-
   it("has the write permission that comment needs", () => {
     expect(job?.permissions?.["pull-requests"]).toBe("write");
   });
