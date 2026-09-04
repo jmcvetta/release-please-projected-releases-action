@@ -93,13 +93,12 @@ jobs:
       # by design and the write below would fail the check over something the
       # contributor cannot fix. The coverage report is still in the log above.
       #
-      # MIT-licensed, and pinned by commit SHA (v2.13.0) rather than by tag: a
-      # tag can be moved onto different code, a SHA cannot.
+      # MIT-licensed.
       - name: Comment the coverage this change leaves
         if: >-
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository
-        uses: davelosert/vitest-coverage-report-action@c4bbc33a89b7ace0e63d35f1f7d4bcee31155a73 # v2.13.0
+        uses: davelosert/vitest-coverage-report-action@v2
         with:
           name: coverage
 
