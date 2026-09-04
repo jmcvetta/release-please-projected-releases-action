@@ -48,7 +48,8 @@ release.``
 
 - **release-please**, manifest mode or plain mode (`release-type:`).
 - **Squash-merge**, which is what makes the title the commit. Merge commits
-  and rebase are planned — [#50][50].
+  and rebase are planned —
+  [#50](https://github.com/jmcvetta/release-please-projected-releases-action/issues/50).
 
 ## Quick start
 
@@ -89,9 +90,3 @@ workflow passes it. Pass this action the same value:
         with:
           release-type: node
 ```
-
-## License
-
-Copyright (C) 2026 Jason McVetta. GPL-3.0-or-later — see [LICENSE](LICENSE).
-
-[50]: https://github.com/jmcvetta/release-please-projected-releases-action/issues/50
