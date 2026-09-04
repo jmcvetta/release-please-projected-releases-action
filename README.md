@@ -77,27 +77,6 @@ title fixed after review has to re-render. `@v0` tracks the latest `0.x`, and
 [`examples/projected-releases.yml`](examples/projected-releases.yml) adds a
 `concurrency` group and skips release-please's own release pull requests.
 
-## Configuration
-
-If release-please reads `release-please-config.json` and
-`.release-please-manifest.json` from your repository, so does this action, and
-there is nothing to set.
-
-If your release workflow instead configures release-please through
-`release-type:` — one package, no config files on disk — give this action the
-same value:
-
-```yaml
-      - uses: jmcvetta/release-please-projected-releases-action@v0
-        with:
-          release-type: node
-```
-
-Whatever else that workflow sets alongside it — `package-path`, `component`,
-`include-component-in-tag`, `tag-separator` — is set here too, under the same
-names. Keeping the two in step is manual for now; [#51][51] is about not
-having to.
-
 ## Command line
 
 The same bundle is a command line, for a projection before the pull request
@@ -112,4 +91,3 @@ node dist/index.mjs --title "feat: a thing" --repo owner/name --base main --out 
 Copyright (C) 2026 Jason McVetta. GPL-3.0-or-later — see [LICENSE](LICENSE).
 
 [50]: https://github.com/jmcvetta/release-please-projected-releases-action/issues/50
-[51]: https://github.com/jmcvetta/release-please-projected-releases-action/issues/51
