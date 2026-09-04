@@ -15,17 +15,47 @@ and is stated as an answer rather than left as silence.
 minor bump may change behaviour, which is what 0.x means. Pin a full version
 if that matters to you.
 
-```
-## Projected releases
+## What it puts on the pull request
+
+One sticky comment, edited in place as the title or the branch changes. Here
+on a two-package repository, where a `feat:` title touches only one of them:
+
+---
+
+### Projected releases
 
 | Package | Path | Files | Current | Without this PR | Projected | Tag |
 | --- | --- | --- | --- | --- | --- | --- |
 | `acme-api` | `api` | 3 | 2.4.1 | 2.4.2 | **2.5.0** | `acme-api@v2.5.0` |
 | `acme-ui` | `ui` | — | 1.0.0 | — | — | — |
 
-<details><summary>Changelog preview</summary> … </details>
-<details><summary>Matched files</summary> … </details>
-```
+<details><summary>Changelog preview</summary>
+
+#### `acme-api`
+
+### Features
+
+* verify the webhook signature header ([#41](https://github.com/acme/acme/pull/41)) ([9f3c1ab](https://github.com/acme/acme/commit/9f3c1ab))
+
+</details>
+
+<details><summary>Matched files</summary>
+
+`acme-api` matched:
+- `api/src/webhook.ts`
+- `api/src/verify.ts`
+- `api/test/webhook.test.ts`
+
+A file belongs to the package with the longest matching path; a
+repository-root file belongs to none.
+
+</details>
+
+<sub>Projected for `9f3c1ab` · re-rendered 2026-09-04 11:20 UTC</sub>
+
+---
+
+The comment's own heading is one level up from the one shown here.
 
 The table is the whole answer, so it is never collapsed and every package
 gets a row — including the ones that did not move, which is what makes the
