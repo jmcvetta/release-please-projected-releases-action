@@ -22,6 +22,8 @@ import type {
 } from "release-please";
 import { armBoundaryWatch, drainBoundaries } from "./boundary.js";
 import type { UnresolvedBoundary } from "./boundary.js";
+import { commitSource } from "./commits.js";
+import type { CommitFiles } from "./commits.js";
 import { componentOfBranch } from "./conventional.js";
 import { ROOT_PACKAGE_PATH, splitFiles } from "./split.js";
 import type { HeadOverrides, ReadHeadFile, SyntheticCommit } from "./pr-view.js";
@@ -31,6 +33,26 @@ import { viewWithPullRequest } from "./pr-view.js";
 export const DEFAULT_CONFIG_FILE = "release-please-config.json";
 /** DEFAULT_MANIFEST_FILE is release-please's version manifest path. */
 export const DEFAULT_MANIFEST_FILE = ".release-please-manifest.json";
+
+/**
+ * COMMIT_SEARCH_DEPTH is how far back a walk may go, and it is
+ * release-please's own default written out rather than changed.
+ *
+ * It is spelled here because the local commit-file index is built to the same
+ * depth: an index shallower than the walk would send the walk to the API for
+ * the commits it stopped short of, which is the cost it exists to remove.
+ */
+export const COMMIT_SEARCH_DEPTH = 500;
+
+/**
+ * COMMIT_BATCH_SIZE is how many commits one GraphQL page carries.
+ *
+ * release-please defaults it to 10, which is 42 serial round trips over a
+ * 419-commit history and 5 over the same history at 100. It changes nothing
+ * about the answer — only how many requests it takes to read the same
+ * commits.
+ */
+export const COMMIT_BATCH_SIZE = 100;
 
 /** PackageConfig is the part of one configured package this preview reads. */
 export interface PackageConfig {
@@ -381,6 +403,9 @@ export interface ProjectOptions {
   /** readHeadFile serves the pull request's version of a file release-please
    * reads from the target branch. See ReadHeadFile in pr-view.ts. */
   readHeadFile?: ReadHeadFile;
+  /** commitFiles answers a commit's file list without the API, when the
+   * caller has a checkout that can. See CommitFiles in commits.ts. */
+  commitFiles?: CommitFiles;
 }
 
 // A `Release-As:` note on a line of its own. The key is matched
@@ -511,6 +536,20 @@ export async function project(options: ProjectOptions): Promise<Projection> {
         [manifestFile]: options.manifest,
       };
 
+  // An override wins over anything the repository's own config says, so a
+  // repository that has tuned either of these keeps its value: the projection
+  // has to describe the release-please run the merge will get, not a
+  // differently configured one. Plain mode has no config file to tune them in.
+  const tuned = plain ? {} : options.config;
+  const manifestOptions = {
+    ...(tuned["commit-search-depth"] === undefined
+      ? { commitSearchDepth: COMMIT_SEARCH_DEPTH }
+      : {}),
+    ...(tuned["commit-batch-size"] === undefined
+      ? { commitBatchSize: COMMIT_BATCH_SIZE }
+      : {}),
+  };
+
   /** build makes a Manifest the way this repository is configured. Both
    * statics are release-please's public surface. */
   const build = (github: GitHub): Promise<Manifest> =>
@@ -519,7 +558,7 @@ export async function project(options: ProjectOptions): Promise<Projection> {
           github,
           options.commit.baseBranch,
           plain,
-          {},
+          manifestOptions,
           plain.path ?? ROOT_PACKAGE_PATH,
         )
       : Manifest.fromManifest(
@@ -527,10 +566,18 @@ export async function project(options: ProjectOptions): Promise<Projection> {
           options.commit.baseBranch,
           configFile,
           manifestFile,
+          manifestOptions,
         );
 
-  const view = viewWithPullRequest(
+  // Both passes read the target branch through one walk, cached between them,
+  // and both serve file lists from the checkout when there is one.
+  const source = commitSource(
     options.github,
+    options.commitFiles ? { files: options.commitFiles } : {},
+  );
+
+  const view = viewWithPullRequest(
+    source,
     options.commit,
     overrides,
     options.readHeadFile,
@@ -562,7 +609,7 @@ export async function project(options: ProjectOptions): Promise<Projection> {
   let pending: Release[] = [];
   let unresolvedBase: UnresolvedBoundary[] = [];
   try {
-    const withoutPr = await build(options.github);
+    const withoutPr = await build(source);
     pending = toReleases(await withoutPr.buildPullRequests(), prefix);
     unresolvedBase = drainBoundaries();
   } catch (error) {

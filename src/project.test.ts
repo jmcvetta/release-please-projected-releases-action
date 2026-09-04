@@ -11,8 +11,14 @@
 
 import { beforeAll, describe, expect, it } from "vitest";
 import { setLogger } from "release-please";
-import { fakeScm, RELEASE_SHA } from "./fake-scm.fixture.js";
-import { project, tagFor } from "./project.js";
+import { fakeScm, RELEASE_SHA, walkRecord } from "./fake-scm.fixture.js";
+import type { WalkRecord } from "./fake-scm.fixture.js";
+import {
+  COMMIT_BATCH_SIZE,
+  COMMIT_SEARCH_DEPTH,
+  project,
+  tagFor,
+} from "./project.js";
 import type { Projection } from "./project.js";
 import { render } from "./render.js";
 
@@ -795,5 +801,82 @@ describe("a package that keeps its component out of its tags", () => {
     const out = render(await bare(), { title: "feat: a thing", malformed: false });
     expect(out).toContain("| **2.5.0** |");
     expect(out).not.toContain("None —");
+  });
+});
+
+describe("the commit walk", () => {
+  /** walked projects one pull request and reports what the repository's
+   * history was asked for on the way. */
+  async function walked(options: {
+    config?: Record<string, unknown>;
+    releases?: { tagName: string; sha: string }[];
+    commits?: number;
+  }): Promise<WalkRecord> {
+    const config = options.config ?? CONFIG;
+    const record = walkRecord();
+    const commits = Array.from({ length: options.commits ?? 3 }, (_, i) => ({
+      sha: `feed${i}`,
+      message: "fix: a thing",
+      files: ["api/src/x.ts"],
+    }));
+    await project({
+      github: fakeScm({
+        config,
+        manifest: MANIFEST,
+        ...(options.releases ? { releases: options.releases } : {}),
+        commits,
+        record,
+      }),
+      config,
+      manifest: MANIFEST,
+      commit: {
+        title: "feat: a thing",
+        body: "",
+        files: ["api/src/x.ts"],
+        number: 7,
+        headSha: "abcdef1234567890",
+        headBranch: "topic",
+        baseBranch: "master",
+      },
+    });
+    return record;
+  }
+
+  it("reads the history once for both passes", async () => {
+    // The two passes read the same branch, so the second one is served from
+    // what the first read. Unmemoized this is the whole cost paid twice.
+    const record = await walked({ commits: 5 });
+    expect(record.walks).toHaveLength(1);
+    expect(new Set(record.yielded).size).toBe(record.yielded.length);
+  });
+
+  it("asks for pages ten times the size release-please defaults to", async () => {
+    const record = await walked({});
+    expect(record.walks[0]?.options).toMatchObject({
+      batchSize: COMMIT_BATCH_SIZE,
+      maxResults: COMMIT_SEARCH_DEPTH,
+    });
+  });
+
+  it("leaves a repository that tunes the walk with what it configured", async () => {
+    // A projection describes the release-please run the merge will get. That
+    // run reads these keys from the repository's own config, so a value set
+    // there is not this action's to overrule.
+    const record = await walked({
+      config: { ...CONFIG, "commit-batch-size": 25, "commit-search-depth": 40 },
+    });
+    expect(record.walks[0]?.options).toMatchObject({
+      batchSize: 25,
+      maxResults: 40,
+    });
+  });
+
+  it("stops itself where release-please says, not where this does", async () => {
+    // Nothing here truncates a walk: release-please stops at the release
+    // commit, and a walk that does not stop is one whose answer the comment
+    // is already warning about. A cap would have to fire on a new
+    // component's first release too, which legitimately replays everything.
+    const record = await walked({ commits: 250 });
+    expect(record.yielded).toHaveLength(251);
   });
 });

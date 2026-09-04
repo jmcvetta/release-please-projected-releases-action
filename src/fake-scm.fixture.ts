@@ -40,6 +40,23 @@ export interface FakeScmOptions {
   files?: Record<string, string>;
   configFile?: string;
   manifestFile?: string;
+  /** record collects what the commit walk was asked for and what it handed
+   * back, for the tests that are about the walk rather than the versions. */
+  record?: WalkRecord;
+}
+
+/** WalkRecord is what a fake repository saw of the commit walks over it. */
+export interface WalkRecord {
+  /** walks is one entry per call of the iterator, with the options it was
+   * given. A second entry means the history was read twice. */
+  walks: { targetBranch: string; options: unknown }[];
+  /** yielded is every commit sha handed out, in order and with repeats. */
+  yielded: string[];
+}
+
+/** walkRecord is an empty record, for a test to hand in and read after. */
+export function walkRecord(): WalkRecord {
+  return { walks: [], yielded: [] };
 }
 
 /** RELEASE_SHA is the commit every fixture release points at. The commit
@@ -77,8 +94,15 @@ export function fakeScm(options: FakeScmOptions): GitHub {
       if (path === manifestFile) return options.manifest;
       throw new Error(`unexpected getFileJson: ${path}`);
     },
-    async *mergeCommitIterator(): AsyncGenerator<Commit> {
-      for (const commit of history) yield commit;
+    async *mergeCommitIterator(
+      targetBranch: string,
+      iteratorOptions?: unknown,
+    ): AsyncGenerator<Commit> {
+      options.record?.walks.push({ targetBranch, options: iteratorOptions });
+      for (const commit of history) {
+        options.record?.yielded.push(commit.sha);
+        yield commit;
+      }
     },
     async *releaseIterator(): AsyncGenerator<
       FakeRelease & { notes: string }

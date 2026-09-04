@@ -34,8 +34,20 @@ export interface FakeRepo {
   /** files are served through the git tree and blob endpoints, which is how
    * release-please reads a package.json. */
   files: Record<string, string>;
-  /** commits are the merge commits on the branch, newest first. */
-  commits: { sha: string; message: string; files: string[] }[];
+  /**
+   * commits are the merge commits on the branch, newest first.
+   *
+   * `unassociated` drops the pull request GitHub would associate with the
+   * commit, which is what a direct push to the branch looks like. It is the
+   * case that costs a REST round trip per commit: with no pull request to
+   * take a file list from, release-please backfills one commit at a time.
+   */
+  commits: {
+    sha: string;
+    message: string;
+    files: string[];
+    unassociated?: boolean;
+  }[];
   /** releases are the published releases, newest first. */
   releases: { tagName: string; sha: string }[];
   /** pullRequests are the open pull requests the REST list endpoint serves,
@@ -80,7 +92,7 @@ export async function startFakeGitHub(repo: FakeRepo): Promise<FakeGitHub> {
 
   const commitNodes = repo.commits.map((commit) => ({
     associatedPullRequests: {
-      nodes: [
+      nodes: commit.unassociated ? [] : [
         {
           number: 1,
           title: commit.message.split("\n")[0],
@@ -108,6 +120,7 @@ export async function startFakeGitHub(repo: FakeRepo): Promise<FakeGitHub> {
   const FILES = new RegExp(`^${escaped}/pulls/(\\d+)/files$`);
   const COMMENTS = new RegExp(`^${escaped}/issues/\\d+/comments$`);
   const COMMENT = new RegExp(`^${escaped}/issues/comments/(\\d+)$`);
+  const COMMIT_FILES = new RegExp(`^${escaped}/commits/([0-9a-z]+)$`);
 
   const server: Server = createServer((req, res) => {
     let body = "";
@@ -203,6 +216,18 @@ export async function startFakeGitHub(repo: FakeRepo): Promise<FakeGitHub> {
         if (!existing) return send(404, { message: "no comment" });
         existing.body = String(JSON.parse(body || "{}").body ?? "");
         return send(200, existing);
+      }
+
+      const commit = COMMIT_FILES.exec(path);
+      if (commit) {
+        // What release-please backfills a file list with when GraphQL gave it
+        // no pull request to read one from.
+        const found = repo.commits.find((c) => c.sha === commit[1]);
+        if (!found) return send(404, { message: "no commit" });
+        return send(200, {
+          sha: found.sha,
+          files: found.files.map((filename) => ({ filename })),
+        });
       }
 
       if (url.startsWith(`${base}/git/trees/`)) {
