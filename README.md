@@ -5,7 +5,9 @@
 [![License](https://img.shields.io/github/license/jmcvetta/release-please-projected-releases-action)](LICENSE)
 
 A GitHub Action that comments on a pull request with the release-please tags
-merging it will cut — or says plainly that nothing is released.
+merging it will cut — or says plainly that nothing is released. The versions,
+tags and changelog come from a bundled release-please rather than a
+reimplementation of its rules.
 
 ---
 
@@ -46,9 +48,6 @@ release.``
 
 - **release-please**, manifest mode or plain mode (`release-type:`).
 - **Squash-merge**, which is what makes the title the commit.
-- **Read-only** — the default `GITHUB_TOKEN`, nothing pushed, no App identity.
-- Versions, tags and changelog come from a bundled release-please rather than
-  a reimplementation of it.
 
 ## Quick start
 
