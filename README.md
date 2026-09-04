@@ -46,7 +46,8 @@ release.``
 ## Does it fit your repository?
 
 - **release-please**, manifest mode or plain mode (`release-type:`).
-- **Squash-merge**, which is what makes the title the commit.
+- **Squash-merge**, which is what makes the title the commit. Merge commits
+  and rebase are planned — [#50][50].
 
 ## Quick start
 
@@ -103,3 +104,5 @@ node dist/index.mjs --title "feat: a thing" --repo owner/name --base main --out 
 ## License
 
 Copyright (C) 2026 Jason McVetta. GPL-3.0-or-later — see [LICENSE](LICENSE).
+
+[50]: https://github.com/jmcvetta/release-please-projected-releases-action/issues/50
