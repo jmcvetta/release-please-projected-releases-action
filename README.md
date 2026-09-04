@@ -91,13 +91,6 @@ Outputs: `body`, `comment-file`, `releases` (JSON, one
 and `recognized-types`, which a PR-title gate can use instead of its own copy
 of the list.
 
-## Fork pull requests
-
-On a pull request from a fork the action writes the projection to the job
-summary instead of commenting. To get the comment as well, copy the
-`workflow_run` pair [`fork-safe-render.yml`](examples/fork-safe-render.yml) +
-[`fork-safe-comment.yml`](examples/fork-safe-comment.yml).
-
 ## Command line
 
 The same bundle is a command line, for a projection before the pull request
