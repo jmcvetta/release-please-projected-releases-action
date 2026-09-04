@@ -189,6 +189,35 @@ necessary and not sufficient: **the last thing to check is the merge box
 itself, which is editable.** Delete the `---------` block there, or move the
 trailer below it, before confirming the merge.
 
+## The title's type is checked, but the check is not required
+
+`.github/workflows/pr-title-check.yml` runs
+`amannn/action-semantic-pull-request` over the title, and
+`src/pr-title-check.test.ts` pins its `types:` list to
+`conventional-types.json` in both directions. That action's own default is
+the Angular `conventional-commit-types` list, which is a **near-miss rather
+than a wrong list**: it omits `feature`, which release-please treats as a
+synonym for `feat` in both the versioning strategy and the changelog preset.
+Left at its default, the gate would reject a title that would have released
+correctly, and it would do so for as long as nobody wrote `feature:` -- which
+is how the sibling repository carried the bug for the whole life of the file.
+
+The gate exists because both ways a bad type fails are quiet, and the quieter
+one is a **miscased** type: `Feat:` renders a correct-looking Features entry
+(the changelog lowercases before matching) while `DefaultVersioningStrategy`
+compares `commit.type === 'feat'` literally and bumps a **patch**. A feature
+shipped as a patch release, no error anywhere. `wip:` matches nothing and
+simply releases nothing.
+
+**It is not a required check, and that is the ruleset's constraint rather
+than a judgement about this one.** `required_status_checks` is absent from
+the `master` ruleset entirely, because the release job authenticates with the
+default token and GitHub suppresses workflow events for everything that token
+pushes -- so nothing reports on the release pull request, and any required
+check would block the one merge that cuts a tag. Configuring
+`RELEASE_BOT_APP_ID` + `RELEASE_BOT_PRIVATE_KEY` is what makes requiring it
+possible; until then the check is advisory and a red one has to be *read*.
+
 ## The release job needs permission to open a pull request
 
 `release-please.yml` falls back to `github.token` when the App variables are
