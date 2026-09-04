@@ -47,16 +47,31 @@ const gateTypes = (step?.with?.types ?? "")
   .map((line) => line.trim())
   .filter((line) => line !== "");
 
-/** checkRunNames are the names every job in every workflow reports under: a
- * job's `name:` when it declares one, and its job id otherwise. */
-function checkRunNames(): string[] {
+interface Workflow {
+  on?: { pull_request?: { paths?: string[] } | null };
+  jobs?: Record<string, { name?: string } | undefined>;
+}
+
+/** workflows are every file in .github/workflows, parsed. */
+function workflows(): Workflow[] {
   const dir = new URL("../.github/workflows/", import.meta.url);
-  return readdirSync(dir).flatMap((file) => {
-    const wf = parse(readFileSync(new URL(file, dir), "utf8")) as {
-      jobs?: Record<string, { name?: string } | undefined>;
-    };
-    return Object.entries(wf.jobs ?? {}).map(([id, job]) => job?.name ?? id);
-  });
+  return readdirSync(dir).map(
+    (file) => parse(readFileSync(new URL(file, dir), "utf8")) as Workflow,
+  );
+}
+
+/** checkRunNames are the names a workflow's jobs report under: a job's `name:`
+ * when it declares one, and its job id otherwise. */
+function checkRunNames(wf: Workflow): string[] {
+  return Object.entries(wf.jobs ?? {}).map(([id, job]) => job?.name ?? id);
+}
+
+/** requiredContexts are the check runs the master ruleset will not merge
+ * without. */
+function requiredContexts(): string[] {
+  return [...ruleset.matchAll(/context\s*=\s*"([^"]+)"/g)].map(
+    (m) => m[1] as string,
+  );
 }
 
 describe("the pull request title gate", () => {
@@ -110,11 +125,27 @@ describe("the pull request title gate", () => {
     // The same pair, checked from the other end and over every workflow: a
     // context nothing reports blocks every merge, so this fails on the
     // rename that would cause it rather than on the pull request after it.
-    const contexts = [...ruleset.matchAll(/context\s*=\s*"([^"]+)"/g)].map(
-      (m) => m[1] as string,
-    );
-    expect(contexts.length).toBeGreaterThan(0);
-    for (const context of contexts) expect(checkRunNames()).toContain(context);
+    const produced = workflows().flatMap(checkRunNames);
+    expect(requiredContexts().length).toBeGreaterThan(0);
+    for (const context of requiredContexts())
+      expect(produced).toContain(context);
+  });
+
+  it("requires nothing a `paths:` filter can withhold", () => {
+    // The other way a required check goes missing, and the one this
+    // repository is actually set up for: infra.yml is gated on `paths:`, and
+    // GitHub evaluates that before allocating a runner, so an unaffected
+    // pull request gets no check run at all -- not a skipped one. A required
+    // context in that state is pending forever. Requiring such a job means
+    // dropping its filter in the same commit; this fails on the combination.
+    const required = new Set(requiredContexts());
+    for (const wf of workflows()) {
+      if (!wf.on?.pull_request?.paths) continue;
+      for (const name of checkRunNames(wf))
+        expect(required.has(name), `${name} is filtered and required`).toBe(
+          false,
+        );
+    }
   });
 
   it("requires no scope", () => {

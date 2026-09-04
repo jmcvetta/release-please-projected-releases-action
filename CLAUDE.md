@@ -291,12 +291,14 @@ The filter names `package.json` and the workflow file alongside `infra/**`,
 because a filter is the leg's real input set rather than its directory:
 `package.json` holds the `check:infra` command line.
 
-This is available only because the `master` ruleset requires no status checks.
-A path-filtered workflow does not report a *skipped* check, it reports
-nothing at all, and a required check that never reports leaves every pull
-request pending forever. So the day `required_status_checks` is added -- the
-README says when -- this filter comes off, or `infra` stays out of the required
-set.
+This is available only because `infra` is not a required check. A
+path-filtered workflow does not report a *skipped* check, it reports nothing at
+all, and a required check that never reports leaves every pull request pending
+forever. The ruleset does now require `validate-title` (see above), and that
+resolved this the second way the sentence used to offer: the filter stayed on
+and `infra` stayed out of the required set. Requiring it later means dropping
+the filter in the same commit, and `src/pr-title-check.test.ts` fails on the
+combination rather than letting a blocked pull request report it.
 
 
 ## A variant entry point calls the original; it never copies it
