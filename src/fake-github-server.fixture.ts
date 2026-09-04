@@ -12,6 +12,14 @@
  * So this fake is deliberately literal about URLs. It serves GraphQL at
  * `/graphql` and nothing else, which is what makes a wrongly-assembled
  * endpoint a 404 here exactly as it is against github.com.
+ *
+ * It serves two families of endpoint, and the distinction is worth keeping in
+ * mind when adding to it. release-please reads the git trees, blobs, tags and
+ * GraphQL history; the action reads the repository's merge settings and its
+ * open pull requests, lists a pull request's files, and posts its own comment.
+ * Only the first family is needed to render a projection -- but an entry point
+ * makes both, and the decisions worth testing in src/action.ts are about what
+ * it does when one of the second family fails.
  */
 
 import { createServer } from "node:http";
@@ -30,6 +38,24 @@ export interface FakeRepo {
   commits: { sha: string; message: string; files: string[] }[];
   /** releases are the published releases, newest first. */
   releases: { tagName: string; sha: string }[];
+  /** pullRequests are the open pull requests the REST list endpoint serves,
+   * which is where the action finds the standing release pull requests. */
+  pullRequests?: { headRefName: string; url: string }[];
+  /** prFiles is the changed-file list per pull request number, served by the
+   * REST endpoint the action falls back to when the checkout cannot be
+   * diffed. Absent means the pull request has none. */
+  prFiles?: Record<number, string[]>;
+  /** commentStatus forces a status on the comment write endpoints. 403 and
+   * 404 are what a fork's read-only token gets and are meant to cost the
+   * comment rather than the run; anything else is a real failure. */
+  commentStatus?: number;
+  /** pullsStatus forces a status on the open pull request list, whose failure
+   * is meant to cost the release pull request links and nothing else. */
+  pullsStatus?: number;
+  /** repositoryStatus forces a status on the repository endpoint the merge
+   * settings are read from, whose failure is meant to cost the merge
+   * advisory and nothing else. */
+  repositoryStatus?: number;
 }
 
 /** FakeGitHub is a running fake, and the record of what was asked of it. */
@@ -38,6 +64,9 @@ export interface FakeGitHub {
   url: string;
   /** requests are every path requested, in order. */
   requests: string[];
+  /** comments are the issue comments as the fake now holds them, so a test
+   * can assert what was posted rather than only that a post happened. */
+  comments: { id: number; body: string }[];
   close(): Promise<void>;
 }
 
@@ -46,6 +75,8 @@ const BLOB = (path: string) => `blob-${Buffer.from(path).toString("hex")}`;
 /** startFakeGitHub serves `repo` until closed. */
 export async function startFakeGitHub(repo: FakeRepo): Promise<FakeGitHub> {
   const requests: string[] = [];
+  const comments: { id: number; body: string }[] = [];
+  let nextCommentId = 100;
 
   const commitNodes = repo.commits.map((commit) => ({
     associatedPullRequests: {
@@ -69,6 +100,14 @@ export async function startFakeGitHub(repo: FakeRepo): Promise<FakeGitHub> {
     message: commit.message,
     author: { name: "A", email: "a@b.c", user: { login: "a" } },
   }));
+
+  const base = `/repos/${repo.owner}/${repo.repo}`;
+  // The action's own REST calls, matched on the path alone because every one
+  // of them carries pagination in the query string.
+  const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const FILES = new RegExp(`^${escaped}/pulls/(\\d+)/files$`);
+  const COMMENTS = new RegExp(`^${escaped}/issues/\\d+/comments$`);
+  const COMMENT = new RegExp(`^${escaped}/issues/comments/(\\d+)$`);
 
   const server: Server = createServer((req, res) => {
     let body = "";
@@ -123,7 +162,49 @@ export async function startFakeGitHub(repo: FakeRepo): Promise<FakeGitHub> {
         });
       }
 
-      const base = `/repos/${repo.owner}/${repo.repo}`;
+      const path = url.split("?")[0] ?? "";
+      if (path === `${base}/pulls`) {
+        if (repo.pullsStatus) return send(repo.pullsStatus, { message: "no" });
+        return send(
+          200,
+          (repo.pullRequests ?? []).map((pr) => ({
+            html_url: pr.url,
+            head: { ref: pr.headRefName },
+          })),
+        );
+      }
+      const files = FILES.exec(path);
+      if (files) {
+        return send(
+          200,
+          (repo.prFiles?.[Number(files[1])] ?? []).map((filename) => ({
+            filename,
+          })),
+        );
+      }
+      if (COMMENTS.test(path)) {
+        if (req.method === "GET") return send(200, comments);
+        if (repo.commentStatus) {
+          return send(repo.commentStatus, { message: "no" });
+        }
+        const created = {
+          id: nextCommentId++,
+          body: String(JSON.parse(body || "{}").body ?? ""),
+        };
+        comments.push(created);
+        return send(201, created);
+      }
+      const edit = COMMENT.exec(path);
+      if (edit) {
+        if (repo.commentStatus) {
+          return send(repo.commentStatus, { message: "no" });
+        }
+        const existing = comments.find((c) => c.id === Number(edit[1]));
+        if (!existing) return send(404, { message: "no comment" });
+        existing.body = String(JSON.parse(body || "{}").body ?? "");
+        return send(200, existing);
+      }
+
       if (url.startsWith(`${base}/git/trees/`)) {
         return send(200, {
           sha: "tree",
@@ -159,6 +240,9 @@ export async function startFakeGitHub(repo: FakeRepo): Promise<FakeGitHub> {
         );
       }
       if (url === base) {
+        if (repo.repositoryStatus) {
+          return send(repo.repositoryStatus, { message: "no" });
+        }
         return send(200, {
           default_branch: repo.branch,
           allow_squash_merge: true,
@@ -174,6 +258,7 @@ export async function startFakeGitHub(repo: FakeRepo): Promise<FakeGitHub> {
   return {
     url: `http://127.0.0.1:${port}`,
     requests,
+    comments,
     close: () =>
       new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
