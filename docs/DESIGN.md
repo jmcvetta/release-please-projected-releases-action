@@ -47,11 +47,3 @@ So the action asserts the method exists before wrapping, records whether the
 wrapper was entered, and throws if `buildPullRequests()` returned without it
 (`assertConsulted` in `src/pr-view.ts`). A moved seam fails the dependency
 bump instead of quietly degrading.
-
-## History
-
-Built inside [jmcvetta/career][career] as `projected-releases/`, so it could
-be exercised against real releases, and extracted here per [career#86][86].
-
-[career]: https://github.com/jmcvetta/career
-[86]: https://github.com/jmcvetta/career/issues/86
