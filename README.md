@@ -80,14 +80,42 @@ title fixed after review has to re-render. `@v0` tracks the latest `0.x`, and
 
 ## Configuration
 
-None, where release-please reads `release-please-config.json` and
-`.release-please-manifest.json` from the repository.
+The projection is computed by release-please itself, so it needs the same
+configuration release-please has. Which of release-please's two modes your
+repository runs in decides whether this action can find that on its own.
 
-Without those files, release-please is configured by the `release-type:` your
-release workflow passes it. Pass this action the same value:
+**Manifest mode — nothing to set.** Where the repository has a
+`release-please-config.json` and a `.release-please-manifest.json`, the action
+reads both out of the checkout. The quick start above is the whole
+configuration.
+
+**Plain mode — pass `release-type`.** Without those files release-please is
+configured by the `release-type:` your release workflow hands it, and there is
+nothing on disk for this action to read. Give it the same value:
 
 ```yaml
       - uses: jmcvetta/release-please-projected-releases-action@v0
         with:
           release-type: node
 ```
+
+`release-type` is the switch between the two, exactly as it is on
+release-please-action. Set it and the repository's one package is configured
+here, by `package-path`, `component`, `include-component-in-tag` and
+`tag-separator`; leave it unset and `config-file`, `manifest-file` and
+`repo-root` say where the two files live.
+
+Everything about the pull request itself — number, title, base branch, head
+commit — comes from the webhook payload, so an ordinary caller sets none of
+it. [`action.yml`](action.yml) lists every input; these are the ones a
+repository is most likely to want.
+
+| Input | Default | What it is for |
+| --- | --- | --- |
+| `token` | `github.token` | `contents: read` for release-please's reads, `pull-requests: write` for the comment. |
+| `mode` | `render-and-comment` | `render` writes the file and the outputs but posts nothing; `comment` posts a body an earlier job rendered. The two halves of the fork-safe pair in [`examples/`](examples). |
+| `changed-files` | `auto` | `auto` diffs the checkout and falls back to the API when the checkout is too shallow to hold the merge base; `git` insists on the checkout; `api` skips it. |
+| `merge-method` | `auto` | `auto` reads the repository's merge settings and says so in the comment when they will not produce the commit the projection assumes. `squash`, `merge` or `rebase` assert one without the read. |
+| `visible-types`, `hidden-types` | resolved from the config | Force the list of commit types that render a changelog line, and so can open a release, where `changelog-sections` does not describe it. |
+| `link-release-prs` | `true` | Lists the open pull requests, so a pending version can link to the release pull request holding it. `false` skips that call, for a token that may not list them. |
+| `comment-header` | `projected-releases` | Identifies the sticky comment. Change it only to keep two invocations on the same pull request from editing each other's. |
