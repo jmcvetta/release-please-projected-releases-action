@@ -255,4 +255,17 @@ WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
 A PARTICULAR PURPOSE. See the [GNU General Public License](LICENSE) for more
 details.
 
+The GPL is a deliberate choice rather than a default, and it is not a
+restriction on using this action. Running it in your CI is use, not
+distribution: it puts no licence condition on the repository it comments on,
+on that repository's code, or on anything it releases. The copyleft attaches
+to distributing this action itself, modified or not — which is to say, to
+anyone who takes this work and passes it on.
+
+The bundled `dist/index.mjs` includes release-please, which is Apache-2.0.
+That licence is compatible with GPLv3, and release-please's own copyright and
+licence are unaffected by being vendored here.
+
+None of the above is legal advice.
+
 [2316]: https://github.com/googleapis/release-please/issues/2316
