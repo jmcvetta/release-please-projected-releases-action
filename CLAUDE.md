@@ -189,6 +189,48 @@ necessary and not sufficient: **the last thing to check is the merge box
 itself, which is editable.** Delete the `---------` block there, or move the
 trailer below it, before confirming the merge.
 
+## The title's type is a required check
+
+`.github/workflows/pr-title-check.yml` runs
+`amannn/action-semantic-pull-request` over the title, and
+`src/pr-title-check.test.ts` pins its `types:` list to
+`conventional-types.json` in both directions. That action's own default is
+the Angular `conventional-commit-types` list, which is a **near-miss rather
+than a wrong list**: it omits `feature`, which release-please treats as a
+synonym for `feat` in both the versioning strategy and the changelog preset.
+Left at its default, the gate would reject a title that would have released
+correctly, and it would do so for as long as nobody wrote `feature:` -- which
+is how the sibling repository carried the bug for the whole life of the file.
+
+The gate exists because both ways a bad type fails are quiet, and the quieter
+one is a **miscased** type: `Feat:` renders a correct-looking Features entry
+(the changelog lowercases before matching) while `DefaultVersioningStrategy`
+compares `commit.type === 'feat'` literally and bumps a **patch**. A feature
+shipped as a patch release, no error anywhere. `wip:` matches nothing and
+simply releases nothing.
+
+**`validate-title` is required by the `master` ruleset**, which is the whole
+point: advisory, the only place that failure shows is a red check nobody is
+obliged to read. The required context is a check-run **name** -- for an
+Actions job, its `name:` when it declares one and its job id otherwise -- so
+`infra/github/main.tf` and the workflow hold one pair in two languages, and
+renaming either alone leaves a required check nothing ever reports: pending
+forever, blocking every pull request, fixable only by someone applying the
+stack by hand. `src/pr-title-check.test.ts` pins that pair too, from both
+ends.
+
+**The cost lands on the release pull request, and it is real.** GitHub
+suppresses workflow events for everything the default token pushes, and
+`release-please.yml` falls back to that token while the App variables are
+unset, so the release pull request gets **no** check runs at all -- measured
+on #42, which has zero. `validate-title` therefore sits "expected" on the one
+pull request whose merge cuts a tag, and merging it takes the admin bypass
+the ruleset declares (`bypass_mode = "pull_request"`, so it is a click in the
+merge box, recorded). Configuring `RELEASE_BOT_APP_ID` +
+`RELEASE_BOT_PRIVATE_KEY` removes the click; `test` stays unrequired until
+then, since requiring it buys nothing on a pull request already being
+bypassed.
+
 ## The release job needs permission to open a pull request
 
 `release-please.yml` falls back to `github.token` when the App variables are
@@ -221,10 +263,17 @@ not folklore about what someone once clicked -- they are declared in
 Two things it is worth knowing before editing that stack, both written up in
 `infra/github/README.md`: the state file is **committed**, which constrains
 what may be added to it (this repository is public, so state is world-readable
-and nothing credential-bearing belongs in it); and `required_status_checks` is
-deliberately absent from the ruleset, because the release pull request is
-opened with the default token and so never receives the check that would be
-required.
+and nothing credential-bearing belongs in it); and the ruleset requires
+`validate-title` and nothing else, because the release pull request is opened
+with the default token and so receives no checks at all -- see the section
+above for what that costs and what removes it.
+
+**An apply is only half done until the state file is committed.** The apply
+happens on someone's laptop, and the state it rewrites is a file in this
+repository. Left uncommitted, the next `tofu plan` from a fresh clone proposes
+re-applying a change that is already live -- which is exactly the signal the
+paragraph above relies on, so a stale state file does not merely lag, it
+breaks the one thing a plan is read for.
 
 `npm run check:infra` validates the configuration without credentials, and CI
 runs it. It is not part of `npm run check`, which must not start requiring
@@ -242,12 +291,14 @@ The filter names `package.json` and the workflow file alongside `infra/**`,
 because a filter is the leg's real input set rather than its directory:
 `package.json` holds the `check:infra` command line.
 
-This is available only because the `master` ruleset requires no status checks.
-A path-filtered workflow does not report a *skipped* check, it reports
-nothing at all, and a required check that never reports leaves every pull
-request pending forever. So the day `required_status_checks` is added -- the
-README says when -- this filter comes off, or `infra` stays out of the required
-set.
+This is available only because `infra` is not a required check. A
+path-filtered workflow does not report a *skipped* check, it reports nothing at
+all, and a required check that never reports leaves every pull request pending
+forever. The ruleset does now require `validate-title` (see above), and that
+resolved this the second way the sentence used to offer: the filter stayed on
+and `infra` stayed out of the required set. Requiring it later means dropping
+the filter in the same commit, and `src/pr-title-check.test.ts` fails on the
+combination rather than letting a blocked pull request report it.
 
 
 ## A variant entry point calls the original; it never copies it

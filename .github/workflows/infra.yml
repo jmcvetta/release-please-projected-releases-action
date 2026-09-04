@@ -18,11 +18,14 @@
 # The filter is the leg's real input set rather than its directory: package.json
 # holds the `check:infra` command line, and this file holds everything else.
 #
-# Safe to gate this way only because the `master` ruleset requires no status
-# checks -- see the comment on `required_status_checks` in infra/github/main.tf.
-# A path-filtered workflow does not report a skipped check, it reports nothing,
-# and a required check that never reports leaves every pull request pending
-# forever. Requiring this one means dropping the filter.
+# Safe to gate this way only because `infra` is not a required check. The
+# ruleset requires `validate-title` and nothing else, and that workflow carries
+# no `paths:` filter for exactly this reason: a path-filtered workflow does not
+# report a skipped check, it reports nothing, and a required check that never
+# reports leaves every pull request pending forever. So requiring this one
+# means dropping the filter first. src/pr-title-check.test.ts fails on the
+# combination rather than leaving it to be discovered on a blocked pull
+# request.
 name: Infra
 
 on:
