@@ -37,7 +37,22 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      # `--no-audit` is the whole reason this step is not two minutes long.
+      # npm runs an audit at the end of every install, and it is a network
+      # round trip that the setup-node cache above cannot help with: measured
+      # here, a warm-cache `npm ci` took 2m17s of a 2m34s job, and the same
+      # install with the audit off takes about four seconds.
+      #
+      # Nothing is lost, because the audit enforced nothing: `npm ci` prints
+      # its findings and exits zero either way, so a vulnerable dependency
+      # would have gone green regardless. What actually acts on dependencies
+      # here is dependabot.yml, which opens a pull request for the upgrade.
+      # If this ever needs to *fail* on an advisory, that is a deliberate
+      # `npm audit --audit-level=...` step, not a side effect of installing.
+      #
+      # `--no-fund` only silences the "46 packages are looking for funding"
+      # line, which no one reads in a CI log.
+      - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
 
       # Before the tests, not after: src/bundle.test.ts runs dist/index.mjs in
