@@ -9,13 +9,14 @@
  * it.
  */
 
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setLogger } from "release-please";
 import { fakeScm } from "./fake-scm.fixture.js";
 import { buildComment, graphqlRoot } from "./run.js";
+import type { quietLogger as QuietLogger } from "./run.js";
 
 beforeAll(() => {
   const quiet = () => {};
@@ -194,5 +195,44 @@ describe("graphqlRoot", () => {
       "https://ghe.example/api",
     );
     expect(graphqlRoot("https://ghe.example/api/")).toBe("https://ghe.example/api");
+  });
+});
+
+describe("quietLogger", () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.doUnmock("release-please");
+  });
+
+  it("sends every level to stderr", async () => {
+    // release-please logs to stdout by default, which for the command line
+    // would land in the middle of the comment body printed there. The logger
+    // it is handed is global state, so this is measured through a stand-in
+    // for setLogger rather than by installing one over the suite's own.
+    const installed: Record<string, (...args: unknown[]) => void>[] = [];
+    vi.resetModules();
+    vi.doMock("release-please", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("release-please")>()),
+      setLogger: (logger: Record<string, (...args: unknown[]) => void>) =>
+        installed.push(logger),
+    }));
+    const { quietLogger } = (await import("./run.js")) as {
+      quietLogger: typeof QuietLogger;
+    };
+
+    quietLogger();
+    expect(installed).toHaveLength(1);
+
+    const seen: unknown[][] = [];
+    const spy = vi
+      .spyOn(console, "error")
+      .mockImplementation((...args: unknown[]) => {
+        seen.push(args);
+      });
+    for (const level of ["debug", "info", "warn", "error", "trace", "fatal"]) {
+      installed[0]![level]!(level);
+    }
+    spy.mockRestore();
+    expect(seen).toEqual([["debug"], ["info"], ["warn"], ["error"], ["trace"], ["fatal"]]);
   });
 });

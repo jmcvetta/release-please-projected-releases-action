@@ -22,3 +22,20 @@ describe("changedFiles", () => {
     expect(changedFiles("m", "h", run)).toEqual(["a.ts"]);
   });
 });
+
+describe("changedFiles, against the checkout it is running in", () => {
+  // The injected runner above proves the arguments; this proves the default
+  // one, which is the only part of this module a workflow actually uses and
+  // the part that is one typo from failing on every pull request.
+  it("diffs a ref against itself and finds nothing", () => {
+    // True in any checkout, shallow ones included: the merge base of HEAD
+    // and HEAD is HEAD.
+    expect(changedFiles("HEAD", "HEAD")).toEqual([]);
+  });
+
+  it("raises when the checkout cannot answer, so the caller can fall back", () => {
+    // The signal src/action.ts turns into "check the repository out with
+    // fetch-depth: 0" before reading the file list from the API instead.
+    expect(() => changedFiles("origin/no-such-branch-here", "HEAD")).toThrow();
+  });
+});

@@ -1,15 +1,36 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   boolInput,
+  error,
   input,
   inputOr,
   listInput,
+  notice,
   readEvent,
   setOutput,
+  summary,
+  warning,
 } from "./runner.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+/** written captures what a call writes to stdout, which is where the runner
+ * reads workflow commands from. */
+function written(write: () => void): string {
+  const chunks: string[] = [];
+  vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
+    chunks.push(String(chunk));
+    return true;
+  });
+  write();
+  vi.restoreAllMocks();
+  return chunks.join("");
+}
 
 const tmp = () => mkdtempSync(join(tmpdir(), "projected-releases-"));
 
@@ -75,6 +96,36 @@ describe("setOutput", () => {
 
   it("does nothing when the runner gave no output file", () => {
     expect(() => setOutput("body", "x", {})).not.toThrow();
+  });
+});
+
+describe("summary", () => {
+  it("appends to the run's job summary", () => {
+    const file = join(tmp(), "summary");
+    summary("## one", { GITHUB_STEP_SUMMARY: file });
+    summary("## two", { GITHUB_STEP_SUMMARY: file });
+    expect(readFileSync(file, "utf8")).toBe("## one\n## two\n");
+  });
+
+  it("does nothing when the runner has no summary", () => {
+    expect(() => summary("## one", {})).not.toThrow();
+  });
+});
+
+describe("annotations", () => {
+  it("writes one workflow command per level", () => {
+    expect(written(() => notice("created"))).toBe("::notice::created\n");
+    expect(written(() => warning("careful"))).toBe("::warning::careful\n");
+    expect(written(() => error("broken"))).toBe("::error::broken\n");
+  });
+
+  it("escapes the three characters the command syntax cannot carry", () => {
+    // A newline would end the command, and a bare `%` would be read as the
+    // start of one of these escapes. The action's warnings are whole
+    // paragraphs, so both arise.
+    expect(written(() => warning("100% done\r\nor not"))).toBe(
+      "::warning::100%25 done%0D%0Aor not\n",
+    );
   });
 });
 

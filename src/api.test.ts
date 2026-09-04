@@ -101,6 +101,32 @@ describe("Client", () => {
     });
   });
 
+  // The fallback for a checkout the local diff cannot use. GitHub caps it at
+  // 3000 files, which is 30 pages, and a pull request that large is exactly
+  // the one where stopping early would misreport the comment's file counts.
+  it("reads a pull request's changed files", async () => {
+    const { client: c, calls } = client([
+      { body: [{ filename: "src/a.ts" }, { filename: "src/b.ts" }] },
+    ]);
+    expect(await c.pullRequestFiles(7)).toEqual(["src/a.ts", "src/b.ts"]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toContain("/pulls/7/files?per_page=100&page=1");
+  });
+
+  it("follows the pages of them", async () => {
+    const full = Array.from({ length: 100 }, (_, i) => ({ filename: `src/${i}.ts` }));
+    const { client: c, calls } = client([{ body: full }, { body: [{ filename: "last" }] }]);
+    const files = await c.pullRequestFiles(7);
+    expect(calls).toHaveLength(2);
+    expect(files).toHaveLength(101);
+    expect(files[100]).toBe("last");
+  });
+
+  it("drops an entry GitHub sent without a filename", async () => {
+    const { client: c } = client([{ body: [{}, { filename: "src/a.ts" }] }]);
+    expect(await c.pullRequestFiles(7)).toEqual(["src/a.ts"]);
+  });
+
   it("stops paging comments on a short page", async () => {
     const { client: c, calls } = client([{ body: [{ id: 1, body: "hi" }] }]);
     expect(await c.issueComments(7)).toEqual([{ id: 1, body: "hi" }]);
