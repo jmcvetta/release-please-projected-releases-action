@@ -16,6 +16,7 @@ import { parse } from "yaml";
 const manifest = parse(
   readFileSync(new URL("../action.yml", import.meta.url), "utf8"),
 ) as {
+  description: string;
   inputs: Record<string, { description: string; default?: string }>;
   outputs: Record<string, { description: string }>;
   runs: { using: string; main: string };
@@ -66,6 +67,12 @@ describe("action.yml", () => {
     const set = literalsPassedTo(source, ["setOutput"]);
     expect(set.size).toBeGreaterThan(0);
     expect([...set].filter((name) => !(name in manifest.outputs)).sort()).toEqual([]);
+  });
+
+  it("keeps the description short enough for the Marketplace", () => {
+    // Publishing rejects a description of 125 characters or more, and the
+    // rejection happens at release time rather than in a pull request.
+    expect(manifest.description.trim().length).toBeLessThan(125);
   });
 
   it("points at the committed bundle on a runtime that still exists", () => {
