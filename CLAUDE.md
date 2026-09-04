@@ -304,17 +304,25 @@ and `infra` stayed out of the required set. Requiring it later means dropping
 the filter in the same commit. Nothing enforces that; the paragraph is the
 enforcement.
 
-**`test.yml` carries the mirror-image filter**: `paths-ignore: infra/**`, so an
-infra-only pull request starts no job there, and the two legs are each other's
-complement -- the action's tests say nothing about the OpenTofu stack and
-`tofu validate` says nothing about the action. A pull request touching both
-still runs both, because GitHub skips a workflow only when *every* changed file
-matches the filter.
+**`test.yml` is filtered too, and the shape of its filter is the point.** It is
+a `paths:` allow-list -- the files these tests read -- rather than a list of
+directories to ignore. The ignore-list came first and was wrong in the ordinary
+way: it named `infra/**`, so a pull request changing only `CLAUDE.md` still ran
+the whole suite. What a leg needs is stated by what it consumes.
 
-Both filters are written once per event, because GitHub Actions does not read
-YAML anchors. Keep the halves the same: a drift between them is invisible on a pull
-request and surfaces later as a merge to `master` that skipped the leg the pull
-request ran.
+The list is longer than `src/**`, because the tests reach outside it:
+`bundle.test.ts` runs `dist/index.mjs` as a process, `packaging.test.ts` reads
+`action.yml` and `package.json`, `coverage.test.ts` and `pr-title-check.test.ts`
+read two of the workflows, and `conventional.ts` falls back to
+`conventional-types.json`. Add to the list when a test starts reading something
+new. **Nothing reports the omission**: an input that is not in the list is one
+this workflow does not run on, which is the cost of an allow-list and the
+reason the comment above it says so.
+
+Both filters -- this one and `infra.yml`'s -- are written once per event,
+because GitHub Actions does not read YAML anchors. Keep the halves the same: a
+drift between them is invisible on a pull request and surfaces later as a merge
+to `master` that skipped the leg the pull request ran.
 
 ## A variant entry point calls the original; it never copies it
 

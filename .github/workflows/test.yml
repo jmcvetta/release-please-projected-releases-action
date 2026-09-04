@@ -11,29 +11,64 @@
 # a script of its own, so the thing CI measures stays the thing a laptop runs.
 name: Test
 
-# `paths-ignore: infra/**` because these tests are the action's and the OpenTofu
-# stack is not the action. infra.yml is the leg that reads those files, and it
-# runs on the mirror-image filter, so neither leg pays for the other's changes.
-# GitHub evaluates the filter before allocating a runner and skips only when
-# *every* changed file matches, so a pull request touching src/ and infra/
-# together still runs everything here.
+# `paths:` is an allow-list rather than an ignore-list, because the question
+# worth asking is what these tests read, not which directory they are bored by.
+# Ignoring infra/ still ran the whole suite for a change to CLAUDE.md.
+#
+# The list is the suite's input set, and it is longer than src/ because the
+# tests reach outside it: bundle.test.ts runs dist/index.mjs as a process,
+# packaging.test.ts reads action.yml and package.json, coverage.test.ts and
+# pr-title-check.test.ts read two of the workflows, and conventional.ts falls
+# back to conventional-types.json. The rest are what typecheck, build and
+# install consume. Add to it when a test starts reading something new -- an
+# input that is not here is one this workflow does not run on, and nothing
+# reports that.
+#
+# What is deliberately absent: infra/**, the prose (README, CLAUDE.md,
+# CONTRIBUTING, SECURITY, CHANGELOG), examples/**, the Makefile, and the
+# workflows no test reads. GitHub evaluates this before allocating a runner and
+# starts the workflow when *any* changed file matches, so a pull request
+# touching src/ and CLAUDE.md together still runs everything here.
 #
 # Safe only while `test` is not a required check. A path-filtered workflow
 # reports no check run at all rather than a skipped one, so a required context
-# naming this job would sit "expected" forever on every infra-only pull request,
-# blocking it, and be fixable only by someone applying the OpenTofu stack by
-# hand. Requiring this job means dropping the filter in the same commit.
+# naming this job would sit "expected" forever on every pull request that
+# matches nothing above, blocking it, and be fixable only by someone applying
+# the OpenTofu stack by hand. Requiring this job means dropping the filter in
+# the same commit.
 
 on:
   push:
     branches: [master]
-    # GitHub Actions does not read YAML anchors, so the filter is written out
-    # for each event. Keep the two the same.
-    paths-ignore:
-      - infra/**
+    # GitHub Actions does not read YAML anchors, so the list is written out for
+    # each event. Keep the two the same.
+    paths:
+      - src/**
+      - dist/**
+      - scripts/bundle.mjs
+      - action.yml
+      - conventional-types.json
+      - package.json
+      - package-lock.json
+      - tsconfig.json
+      - tsconfig.test.json
+      - vitest.config.ts
+      - .github/workflows/pr-title-check.yml
+      - .github/workflows/test.yml
   pull_request:
-    paths-ignore:
-      - infra/**
+    paths:
+      - src/**
+      - dist/**
+      - scripts/bundle.mjs
+      - action.yml
+      - conventional-types.json
+      - package.json
+      - package-lock.json
+      - tsconfig.json
+      - tsconfig.test.json
+      - vitest.config.ts
+      - .github/workflows/pr-title-check.yml
+      - .github/workflows/test.yml
 
 permissions:
   contents: read
