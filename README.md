@@ -79,8 +79,13 @@ title fixed after review has to re-render. `@v0` tracks the latest `0.x`, and
 
 ## Configuration
 
-None, if release-please has a manifest in the checkout. Without one, name the
-release type — the same one your release workflow sets:
+If release-please reads `release-please-config.json` and
+`.release-please-manifest.json` from your repository, so does this action, and
+there is nothing to set.
+
+If your release workflow instead configures release-please through
+`release-type:` — one package, no config files on disk — give this action the
+same value:
 
 ```yaml
       - uses: jmcvetta/release-please-projected-releases-action@v0
@@ -88,7 +93,10 @@ release type — the same one your release workflow sets:
           release-type: node
 ```
 
-The remaining inputs and the outputs are in [`action.yml`](action.yml).
+Whatever else that workflow sets alongside it — `package-path`, `component`,
+`include-component-in-tag`, `tag-separator` — is set here too, under the same
+names. Keeping the two in step is manual for now; [#51][51] is about not
+having to.
 
 ## Command line
 
@@ -104,3 +112,4 @@ node dist/index.mjs --title "feat: a thing" --repo owner/name --base main --out 
 Copyright (C) 2026 Jason McVetta. GPL-3.0-or-later — see [LICENSE](LICENSE).
 
 [50]: https://github.com/jmcvetta/release-please-projected-releases-action/issues/50
+[51]: https://github.com/jmcvetta/release-please-projected-releases-action/issues/51
