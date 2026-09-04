@@ -1,5 +1,5 @@
 /**
- * Test-runner configuration, which exists only to turn coverage on.
+ * Test-runner configuration: coverage, and one default stated on purpose.
  *
  * vitest finds and runs this suite without help, but it reports no coverage
  * at all until a provider is named, and it reports that absence silently:
@@ -15,6 +15,28 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    // vitest's default, restated so that it is a decision rather than an
+    // accident -- and so that vitest stops offering to change it.
+    //
+    // v5 prints a performance hint after every run, in CI too, estimating
+    // that `isolate: false` would be a few hundred milliseconds faster by
+    // reusing a worker across test files instead of spawning one per file.
+    // Measured with `vitest doctor`, that is real: about -31% of a two-second
+    // suite, and the suite passes with it off, twice, under a shuffled file
+    // order.
+    //
+    // It is still declined. The saving is under a second on a CI job that is
+    // about eighteen, and what it buys that back with is shared module state
+    // between files: whichever file runs first leaves its modules behind for
+    // the next one. This suite has such state -- `setLogger` from
+    // release-please is global, and two test files set it -- and the
+    // documented failure mode is not a clean break but an order-dependent
+    // test that passes on a laptop and flakes in CI.
+    //
+    // Writing it explicitly also silences the hint: vitest never suggests
+    // changing an option the configuration sets on purpose.
+    isolate: true,
+
     coverage: {
       provider: "v8",
       // `text` for a human reading the CI log; the two JSON reporters are
