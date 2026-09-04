@@ -663,6 +663,25 @@ function warn(
         " package its own `component`.",
     );
   }
+  // Ahead of the Release-As note, because it is the one warning that says the
+  // numbers in the table may be wrong rather than explaining why they are
+  // what they are.
+  for (const found of projection.unresolved) {
+    const name = found.component ? `\`${found.component}\`` : `\`${found.path}\``;
+    const where =
+      found.on === "both"
+        ? ""
+        : found.on === "base"
+          ? " on the target branch"
+          : " on this branch";
+    warnings.push(
+      `- ${name} has no release or tag at its manifest version` +
+        ` \`${found.version}\`${where}, so release-please had no boundary and` +
+        " replayed the component's whole history. **Any version shown for it" +
+        " above may be wrong.** A component being released for the first time" +
+        " looks like this too.",
+    );
+  }
   if (projection.ignoredReleaseAs) {
     warnings.push(
       `- \`Release-As: ${projection.ignoredReleaseAs}\` was **ignored** —` +

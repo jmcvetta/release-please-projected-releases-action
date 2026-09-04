@@ -10,8 +10,9 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { GitHub, setLogger } from "release-please";
+import { GitHub } from "release-please";
 import type { GitHub as GitHubType } from "release-please";
+import { watchBoundaries } from "./boundary.js";
 import { isMalformed, resolveTypes } from "./conventional.js";
 import type { TypeSet } from "./conventional.js";
 import { project, DEFAULT_CONFIG_FILE, DEFAULT_MANIFEST_FILE } from "./project.js";
@@ -25,6 +26,7 @@ const EMPTY: Projection = {
   files: [],
   projected: [],
   pending: [],
+  unresolved: [],
 };
 
 /** RunOptions are everything a projection needs, from either entry point. */
@@ -117,22 +119,23 @@ export function graphqlRoot(url: string): string {
 }
 
 /**
- * quietLogger sends release-please's logging to stderr.
+ * quietLogger sends release-please's logging to stderr, and watches it on the
+ * way past for the unresolved-boundary lines the comment warns about.
  *
- * It logs to stdout by default, which for the CLI would land in the middle of
- * the comment body it prints there. On a runner both streams reach the same
- * log, so nothing is lost either way.
+ * release-please logs to stdout by default, which for the CLI would land in
+ * the middle of the comment body it prints there. On a runner both streams
+ * reach the same log, so nothing is lost either way.
  */
 export function quietLogger(): void {
   const toStderr = (...args: unknown[]) => console.error(...args);
-  setLogger({
+  watchBoundaries({
     debug: toStderr,
     info: toStderr,
     warn: toStderr,
     error: toStderr,
     trace: toStderr,
     fatal: toStderr,
-  } as Parameters<typeof setLogger>[0]);
+  } as Parameters<typeof watchBoundaries>[0]);
 }
 
 /**

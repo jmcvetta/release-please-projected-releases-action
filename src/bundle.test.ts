@@ -94,6 +94,18 @@ describe("the committed bundle, run against a fake GitHub", () => {
     expect(out).toContain("a thing");
   });
 
+  it("keeps release-please's logging off stdout", async () => {
+    // The boundary warning is read out of release-please's log stream, which
+    // means the action installs a logger over release-please's own and needs
+    // that to still be the same module once esbuild has inlined both. If it
+    // were not, the default logger would survive and print to stdout -- where
+    // the CLI writes the comment body -- so a clean first line is the
+    // observable form of the seam holding.
+    const out = await project("feat: a thing");
+    expect(out.startsWith("## Projected releases")).toBe(true);
+    expect(out).not.toContain("Splitting ");
+  });
+
   it("reports that a type that releases nothing releases nothing", async () => {
     expect(await project("chore: tidy up")).toContain(
       "None — `chore:` produces no release.",

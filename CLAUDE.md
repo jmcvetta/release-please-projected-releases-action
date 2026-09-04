@@ -346,6 +346,46 @@ sticky comment that matched on "my newest comment" rather than on its own
 hidden marker would edit the other one. That is what `src/comment.ts` is
 careful about, and why.
 
+## The unresolved-boundary warning is read out of a log line
+
+release-please resolves a component's last release by matching a tag or a
+GitHub release against that component's manifest entry. When the two disagree
+there is no boundary, and the damage is larger than a missing number:
+`Manifest.buildPullRequests` sets `needsBootstrap`, which **disables the early
+exit from the commit walk**, so it runs to `commitSearchDepth` (500) and
+attributes every commit it reaches to the next release. The component's whole
+history goes into one changelog and the version comes out of arithmetic over
+all of it.
+
+Measured on the sibling `jmcvetta/career`, whose `viewer` component lost a tag
+to two release runs racing: one pass of the projection walked **67** commits
+with the boundary resolved and **419** without, 7.3s against 103s, in the same
+job. The projection it produced in that state proposed a major version nobody
+wanted, and said nothing about why.
+
+So the comment warns. The condition is taken from release-please rather than
+recomputed — it already resolves against releases, then tags, then a
+root-package fallback, honouring `tag-separator`, `include-component-in-tag`
+and `include-v-in-tag`, and a second copy of those rules here would be a second
+thing to keep in step. `boundary.ts` reads the line release-please logs when it
+gives up on a path, which is emitted once per affected component and carries
+the path, the component and the version.
+
+**That is a seam, and its failure mode is silence.** If an upgrade rewords the
+line, nothing errors — the warning simply stops appearing, which is the same
+class of quiet failure the warning exists to catch. `boundary.test.ts`
+therefore drives real release-please over a fixture in this state; rewording
+the pattern fails six of its tests, four of them end-to-end. It fails on the
+dependency bump, where someone is already looking.
+
+**The warning cannot diagnose, only report.** A component's *first* release
+looks identical from here: a manifest entry with no tag yet. The comment says
+what is true of both and leaves the reading to the reader.
+
+**The two passes are drained separately.** A pull request repairing the
+manifest resolves on its own branch and not on the one it targets, which is
+the ordinary shape of the repair, so the warning says which side it found.
+
 ## Bundling breaks things no unit test sees
 
 Three times now, and always the same shape: a dependency's ordinary runtime

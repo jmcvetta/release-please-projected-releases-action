@@ -26,6 +26,7 @@ const NOW = new Date("2026-09-01T12:00:00Z");
 function projection(over: Partial<Projection> = {}): Projection {
   return {
     packages: [API, UI],
+    unresolved: [],
     touched: new Map([["api", ["api/src/x.ts"]]]),
     files: ["api/src/x.ts"],
     projected: [],

@@ -44,6 +44,14 @@ One sticky comment, re-rendered as the title or the branch changes. When
 nothing releases there is no table, just ``None — `docs:` produces no
 release.``
 
+It also says when the numbers cannot be trusted. If a component's entry in
+`.release-please-manifest.json` names a version that no release or tag
+matches, release-please has no boundary to compute from: it replays the
+component's whole history into one changelog and reaches a version by
+arithmetic over all of it. That is what a lost tag looks like — and what a
+first release looks like — so the comment reports the disagreement and marks
+the affected version as unreliable rather than presenting it as the answer.
+
 ## Does it fit your repository?
 
 - **release-please**, manifest mode or plain mode (`release-type:`).

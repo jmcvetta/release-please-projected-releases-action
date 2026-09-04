@@ -5066,7 +5066,7 @@ var require_lodash = __commonJS({
       if (stacked && stack.get(other)) {
         return stacked == other;
       }
-      var index = -1, result = true, seen = bitmask & UNORDERED_COMPARE_FLAG ? new SetCache() : void 0;
+      var index = -1, result = true, seen2 = bitmask & UNORDERED_COMPARE_FLAG ? new SetCache() : void 0;
       stack.set(array, other);
       stack.set(other, array);
       while (++index < arrLength) {
@@ -5081,10 +5081,10 @@ var require_lodash = __commonJS({
           result = false;
           break;
         }
-        if (seen) {
+        if (seen2) {
           if (!arraySome(other, function(othValue2, othIndex) {
-            if (!seen.has(othIndex) && (arrValue === othValue2 || equalFunc(arrValue, othValue2, customizer, bitmask, stack))) {
-              return seen.add(othIndex);
+            if (!seen2.has(othIndex) && (arrValue === othValue2 || equalFunc(arrValue, othValue2, customizer, bitmask, stack))) {
+              return seen2.add(othIndex);
             }
           })) {
             result = false;
@@ -61562,7 +61562,55 @@ function mergeAdvisories(context) {
 }
 
 // src/project.ts
+var import_release_please2 = __toESM(require_src2(), 1);
+
+// src/boundary.ts
 var import_release_please = __toESM(require_src2(), 1);
+var UNRESOLVED = /^No latest release found for path: (.*), component: (.*), but a previous version \((.*)\) was specified in the manifest\.$/;
+function parseUnresolvedBoundary(message) {
+  const found = UNRESOLVED.exec(message);
+  if (!found) return void 0;
+  return { path: found[1] ?? "", component: found[2] ?? "", version: found[3] ?? "" };
+}
+var SILENT = {
+  error: () => {
+  },
+  warn: () => {
+  },
+  info: () => {
+  },
+  debug: () => {
+  },
+  trace: () => {
+  }
+};
+var watching = false;
+var seen = [];
+function watchBoundaries(sink) {
+  const record = {};
+  for (const [level, fn2] of Object.entries(sink)) {
+    if (typeof fn2 !== "function") continue;
+    record[level] = level === "info" ? (...args) => {
+      const [message] = args;
+      if (typeof message === "string") {
+        const found = parseUnresolvedBoundary(message);
+        if (found) seen.push(found);
+      }
+      fn2.apply(sink, args);
+    } : (...args) => fn2.apply(sink, args);
+  }
+  watching = true;
+  seen = [];
+  (0, import_release_please.setLogger)(record);
+}
+function armBoundaryWatch() {
+  if (!watching) watchBoundaries(SILENT);
+}
+function drainBoundaries() {
+  const found = seen;
+  seen = [];
+  return found;
+}
 
 // src/conventional.ts
 import { readFileSync } from "node:fs";
@@ -61854,7 +61902,7 @@ var FENCE = /^ {0,3}(`{3,}|~{3,})/;
 var SEEN = /\d+\.\d+\.\d+(?:-[^+\s]+)?(?:\+\S+)?/;
 var MEANT = /^\d+\.\d+\.\d+(?:-[^+\s]+)?(?:\+\S+)?$/;
 function releaseAsNotes(body) {
-  const seen = [];
+  const seen2 = [];
   const meant = [];
   let fence;
   for (const line of body.split(/\r?\n/)) {
@@ -61871,10 +61919,10 @@ function releaseAsNotes(body) {
     if (value === void 0) continue;
     const version = SEEN.exec(value)?.[0];
     if (!version) continue;
-    seen.push(version);
+    seen2.push(version);
     if (MEANT.test(value)) meant.push(version);
   }
-  return { seen, meant: meant[meant.length - 1] };
+  return { seen: seen2, meant: meant[meant.length - 1] };
 }
 async function project(options) {
   const configFile = options.configFile ?? DEFAULT_CONFIG_FILE;
@@ -61888,13 +61936,13 @@ async function project(options) {
     [configFile]: options.config,
     [manifestFile]: options.manifest
   };
-  const build = (github) => plain ? import_release_please.Manifest.fromConfig(
+  const build = (github) => plain ? import_release_please2.Manifest.fromConfig(
     github,
     options.commit.baseBranch,
     plain,
     {},
     plain.path ?? ROOT_PACKAGE_PATH
-  ) : import_release_please.Manifest.fromManifest(
+  ) : import_release_please2.Manifest.fromManifest(
     github,
     options.commit.baseBranch,
     configFile,
@@ -61906,18 +61954,23 @@ async function project(options) {
     overrides,
     options.readHeadFile
   );
+  armBoundaryWatch();
+  drainBoundaries();
   const withPr = await build(view.github);
   const prefix = options.releaseBranchPrefix;
   const projected = toReleases(await withPr.buildPullRequests(), prefix);
   view.assertConsulted();
+  const unresolvedHead = drainBoundaries();
   const packages = withReleasedVersions(
     withPr,
     await namePackages(withPr, declared)
   );
   let pending = [];
+  let unresolvedBase = [];
   try {
     const withoutPr = await build(options.github);
     pending = toReleases(await withoutPr.buildPullRequests(), prefix);
+    unresolvedBase = drainBoundaries();
   } catch (error) {
     console.error(
       `could not build releases for the target branch, so nothing is pending there: ${String(error)}`
@@ -61937,13 +61990,25 @@ async function project(options) {
     files: [...options.commit.files],
     projected,
     pending,
+    unresolved: mergeUnresolved(unresolvedHead, unresolvedBase),
     ...asked ? { releaseAs: asked } : {},
     ...ignoredReleaseAs ? { ignoredReleaseAs } : {}
   };
 }
+function mergeUnresolved(head, base) {
+  const byPath = /* @__PURE__ */ new Map();
+  const add = (found, on) => {
+    const already = byPath.get(found.path);
+    if (!already) byPath.set(found.path, { ...found, on });
+    else if (already.on !== on) already.on = "both";
+  };
+  for (const found of head) add(found, "head");
+  for (const found of base) add(found, "base");
+  return [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
+}
 
 // src/action.ts
-var import_release_please3 = __toESM(require_src2(), 1);
+var import_release_please4 = __toESM(require_src2(), 1);
 
 // src/release-prs.ts
 function indexReleasePrs(prs, prefix = DEFAULT_TYPES.releaseBranchPrefix, base) {
@@ -61966,7 +62031,7 @@ function loadReleasePrs(text, prefix = DEFAULT_TYPES.releaseBranchPrefix, base) 
 }
 
 // src/run.ts
-var import_release_please2 = __toESM(require_src2(), 1);
+var import_release_please3 = __toESM(require_src2(), 1);
 import { existsSync, readFileSync as readFileSync2 } from "node:fs";
 import { resolve } from "node:path";
 
@@ -62230,6 +62295,13 @@ function warn(projection, options, moved, components) {
       `- ${paths} release under one component name, so a row's **Current** and matched files may belong to either. Give each package its own \`component\`.`
     );
   }
+  for (const found of projection.unresolved) {
+    const name2 = found.component ? `\`${found.component}\`` : `\`${found.path}\``;
+    const where = found.on === "both" ? "" : found.on === "base" ? " on the target branch" : " on this branch";
+    warnings.push(
+      `- ${name2} has no release or tag at its manifest version \`${found.version}\`${where}, so release-please had no boundary and replayed the component's whole history. **Any version shown for it above may be wrong.** A component being released for the first time looks like this too.`
+    );
+  }
   if (projection.ignoredReleaseAs) {
     warnings.push(
       `- \`Release-As: ${projection.ignoredReleaseAs}\` was **ignored** \u2014 release-please returned a different version. A note only counts when it parses as a git trailer, so no non-trailer text may follow it: a \`---\` rule or an attribution line below it voids it silently. Check the merge box too, which is prefilled from the description but editable.`
@@ -62281,14 +62353,15 @@ var EMPTY = {
   touched: /* @__PURE__ */ new Map(),
   files: [],
   projected: [],
-  pending: []
+  pending: [],
+  unresolved: []
 };
 function graphqlRoot(url) {
   return url.replace(/\/+$/, "").replace(/\/graphql$/, "");
 }
 function quietLogger() {
   const toStderr = (...args) => console.error(...args);
-  (0, import_release_please2.setLogger)({
+  watchBoundaries({
     debug: toStderr,
     info: toStderr,
     warn: toStderr,
@@ -62332,7 +62405,7 @@ async function buildComment(options) {
   return { body, projection, malformed, types };
 }
 async function projectPullRequest(options, config, manifest, files) {
-  const github = options.github ?? await import_release_please2.GitHub.create({
+  const github = options.github ?? await import_release_please3.GitHub.create({
     owner: options.owner,
     repo: options.repo,
     defaultBranch: options.base,
@@ -62549,7 +62622,7 @@ async function post(client, number, header, body) {
 function plainConfig(env) {
   const releaseType = input("release-type", env);
   if (!releaseType) return void 0;
-  const known = (0, import_release_please3.getReleaserTypes)();
+  const known = (0, import_release_please4.getReleaserTypes)();
   if (!known.includes(releaseType)) {
     throw new Error(
       `input \`release-type\` must be one of ${[...known].sort().join(", ")}; got \`${releaseType}\``

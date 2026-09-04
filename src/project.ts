@@ -20,6 +20,8 @@ import type {
   ReleaserConfig,
   Strategy,
 } from "release-please";
+import { armBoundaryWatch, drainBoundaries } from "./boundary.js";
+import type { UnresolvedBoundary } from "./boundary.js";
 import { componentOfBranch } from "./conventional.js";
 import { ROOT_PACKAGE_PATH, splitFiles } from "./split.js";
 import type { HeadOverrides, ReadHeadFile, SyntheticCommit } from "./pr-view.js";
@@ -312,6 +314,22 @@ export function toReleases(
   return releases;
 }
 
+/**
+ * Unresolved is a component release-please found no release boundary for,
+ * and which side of the merge it was missing on.
+ *
+ * The two passes read different manifests -- the pull request's copy and the
+ * target branch's -- so one can resolve while the other does not. That is the
+ * ordinary shape of a repair in progress: the pull request that fixes the
+ * manifest sees a resolved boundary on its own branch and a broken one on the
+ * branch it targets.
+ */
+export interface Unresolved extends UnresolvedBoundary {
+  /** on is where the manifest entry with no release was read: this pull
+   * request's copy, the target branch's, or both. */
+  on: "head" | "base" | "both";
+}
+
 /** Projection is everything the comment needs to describe a pull request. */
 export interface Projection {
   /** packages are the configured components and their manifest versions. */
@@ -325,6 +343,12 @@ export interface Projection {
   projected: Release[];
   /** pending is what the target branch already releases without it. */
   pending: Release[];
+  /**
+   * unresolved are the components release-please could not find a release
+   * boundary for, whose versions above are therefore computed over the
+   * component's whole history. See boundary.ts.
+   */
+  unresolved: Unresolved[];
   /** releaseAs is the version a `Release-As:` line in the body asked for. */
   releaseAs?: string;
   /**
@@ -511,10 +535,16 @@ export async function project(options: ProjectOptions): Promise<Projection> {
     overrides,
     options.readHeadFile,
   );
+  // Armed before the first pass and drained after each, so a boundary the
+  // pull request resolves is not reported against the branch that resolved it.
+  armBoundaryWatch();
+  drainBoundaries();
+
   const withPr = await build(view.github);
   const prefix = options.releaseBranchPrefix;
   const projected = toReleases(await withPr.buildPullRequests(), prefix);
   view.assertConsulted();
+  const unresolvedHead = drainBoundaries();
 
   // After the pull requests are built, so the strategies this reads are the
   // ones release-please has already constructed and cached.
@@ -530,9 +560,11 @@ export async function project(options: ProjectOptions): Promise<Projection> {
   // releases nothing, which is what an empty `pending` says. Adopting
   // release-please is exactly this shape, so it must not fail the run.
   let pending: Release[] = [];
+  let unresolvedBase: UnresolvedBoundary[] = [];
   try {
     const withoutPr = await build(options.github);
     pending = toReleases(await withoutPr.buildPullRequests(), prefix);
+    unresolvedBase = drainBoundaries();
   } catch (error) {
     console.error(
       "could not build releases for the target branch, so nothing is" +
@@ -561,7 +593,31 @@ export async function project(options: ProjectOptions): Promise<Projection> {
     files: [...options.commit.files],
     projected,
     pending,
+    unresolved: mergeUnresolved(unresolvedHead, unresolvedBase),
     ...(asked ? { releaseAs: asked } : {}),
     ...(ignoredReleaseAs ? { ignoredReleaseAs } : {}),
   };
+}
+
+/**
+ * mergeUnresolved joins the two passes' findings into one list per component.
+ *
+ * A component missing on both sides is one fact about the repository, not two
+ * about the run, so it is reported once. The `on` field is what survives of
+ * the distinction, and it is worth keeping: a boundary broken only on the
+ * target branch says the pull request is the repair.
+ */
+export function mergeUnresolved(
+  head: readonly UnresolvedBoundary[],
+  base: readonly UnresolvedBoundary[],
+): Unresolved[] {
+  const byPath = new Map<string, Unresolved>();
+  const add = (found: UnresolvedBoundary, on: "head" | "base") => {
+    const already = byPath.get(found.path);
+    if (!already) byPath.set(found.path, { ...found, on });
+    else if (already.on !== on) already.on = "both";
+  };
+  for (const found of head) add(found, "head");
+  for (const found of base) add(found, "base");
+  return [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
 }
