@@ -79,19 +79,16 @@ title fixed after review has to re-render. `@v0` tracks the latest `0.x`, and
 
 ## Configuration
 
-Everything about the pull request comes from the webhook payload, so the
-ordinary caller sets nothing. Full list in [`action.yml`](action.yml); in
-practice:
+None, if release-please has a manifest in the checkout. Without one, name the
+release type your release workflow uses:
 
-| Input | Default | |
-| --- | --- | --- |
-| `release-type` | _unset_ | Plain mode — `node`, `python`, `simple`, … Empty means manifest mode. |
-| `mode` | `render-and-comment` | `render` writes the file and outputs only, `comment` posts what an earlier job rendered — the fork-safe pair. |
+```yaml
+      - uses: jmcvetta/release-please-projected-releases-action@v0
+        with:
+          release-type: node
+```
 
-Outputs: `body`, `comment-file`, `releases` (JSON, one
-`{component, version, notes}` per tag), `releases-count`, `malformed-title`,
-and `recognized-types`, which a PR-title gate can use instead of its own copy
-of the list.
+The remaining inputs and outputs are in [`action.yml`](action.yml).
 
 ## Command line
 
