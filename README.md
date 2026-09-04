@@ -5,8 +5,7 @@
 [![License](https://img.shields.io/github/license/jmcvetta/release-please-projected-releases-action)](LICENSE)
 
 A GitHub Action that comments on a pull request with the release-please tags
-merging it will cut — or says plainly that nothing is released. Reviewers stop
-guessing what a title and a diff add up to.
+merging it will cut — or says plainly that nothing is released.
 
 ---
 
@@ -31,8 +30,7 @@ _1 other package unchanged: `acme-ui`._
 <details><summary>Matched files</summary>
 
 `acme-api` matched `api/src/webhook.ts`, `api/src/verify.ts`,
-`api/test/webhook.test.ts` — a file belongs to the package with the longest
-matching path, and a repository-root file to none.
+`api/test/webhook.test.ts`.
 
 </details>
 
@@ -46,17 +44,11 @@ release.``
 
 ## Does it fit your repository?
 
-- **release-please**, in manifest mode or plain mode. A manifest in the
-  checkout is read as-is; without one, pass the same `release-type` your
-  release workflow does.
-- **Squash-merge**, which is what makes the title the commit. The action reads
-  your merge settings and says so in the comment if they would not.
-- **Read-only.** The default `GITHUB_TOKEN` is enough; nothing is pushed, no
-  App identity, no other service.
-- **Not a reimplementation** — versions, tags and changelog come from a
-  bundled release-please, so they match what your release actually does.
-- Monorepos included: a row per package, and the ones the diff missed counted
-  underneath.
+- **release-please**, manifest mode or plain mode (`release-type:`).
+- **Squash-merge**, which is what makes the title the commit.
+- **Read-only** — the default `GITHUB_TOKEN`, nothing pushed, no App identity.
+- Versions, tags and changelog come from a bundled release-please rather than
+  a reimplementation of it.
 
 ## Quick start
 
@@ -81,40 +73,34 @@ jobs:
       - uses: jmcvetta/release-please-projected-releases-action@v0
 ```
 
-[`examples/projected-releases.yml`](examples/projected-releases.yml) is the
-same with two additions worth having: a `concurrency` group, so an edit and a
-push cannot race the comment, and an `if:` skipping release-please's own
-release pull requests. `@v0` tracks the latest `0.x`.
+`@v0` tracks the latest `0.x`.
+[`examples/projected-releases.yml`](examples/projected-releases.yml) adds a
+`concurrency` group and skips release-please's own release pull requests.
 
 ## Configuration
 
-Everything about the pull request defaults to the webhook payload, so the
-ordinary caller sets nothing. Full list with defaults in
-[`action.yml`](action.yml); the ones worth knowing:
+Everything about the pull request comes from the webhook payload, so the
+ordinary caller sets nothing. Full list in [`action.yml`](action.yml); in
+practice:
 
-| Input | Default | What it is for |
+| Input | Default | |
 | --- | --- | --- |
 | `release-type` | _unset_ | Plain mode — `node`, `python`, `simple`, … Empty means manifest mode. |
-| `mode` | `render-and-comment` | `render` writes the file and outputs only; `comment` posts a body an earlier job rendered. The two halves of the fork-safe arrangement. |
-| `changed-files` | `auto` | `auto` diffs the checkout and falls back to the API when it is too shallow; `git` insists; `api` skips the checkout. |
-| `merge-method` | `auto` | `auto` reads your repository settings. Set it to skip that read. |
-| `visible-types` / `hidden-types` | resolved | Force the changelog type list when `changelog-sections` does not describe it. |
-| `comment-header` | `projected-releases` | Identifies the sticky comment. Change it only to keep two invocations apart. |
+| `mode` | `render-and-comment` | `render` writes the file and outputs only, `comment` posts what an earlier job rendered — the fork-safe pair. |
 
 Outputs: `body`, `comment-file`, `releases` (JSON, one
 `{component, version, notes}` per tag), `releases-count`, `malformed-title`,
-and `recognized-types` — feed that last one to a PR-title gate rather than
-keeping a second copy of the list.
+and `recognized-types`, which a PR-title gate can use instead of its own copy
+of the list.
 
 ## Fork pull requests
 
-A `pull_request` event from a fork gets a read-only token, so the comment
-cannot be posted from that run; the action says so and leaves the projection
-in the job summary. To comment anyway, copy the `workflow_run` pair —
-[`fork-safe-render.yml`](examples/fork-safe-render.yml) renders under the
-fork's token, [`fork-safe-comment.yml`](examples/fork-safe-comment.yml) posts
-from your default branch. Deliberately not `pull_request_target`, which would
-run the head's code with a write token.
+A fork's token is read-only, so the comment cannot be posted from that run —
+the action says so and leaves the projection in the job summary. To comment
+anyway, copy the `workflow_run` pair,
+[`fork-safe-render.yml`](examples/fork-safe-render.yml) +
+[`fork-safe-comment.yml`](examples/fork-safe-comment.yml). Deliberately not
+`pull_request_target`, which would run the head's code with a write token.
 
 ## Command line
 
