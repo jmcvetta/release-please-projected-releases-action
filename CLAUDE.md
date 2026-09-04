@@ -89,9 +89,9 @@ is exactly the position a git trailer needs.
 counts when it is the last paragraph. With the footer appended below it, it
 stops being a trailer, release-please computes the version it would have
 computed anyway, and nothing anywhere reports a problem. That is the failure
-that cost `jmcvetta/career` a release on 2026-08-31, written up in its
-CLAUDE.md, and it recurred here because the mechanism was reached for through
-the wrong tool rather than because the rule was unknown.
+that cost a release on 2026-08-31, and it recurred here because the mechanism
+was reached for through the wrong tool rather than because the rule was
+unknown.
 
 So: **always read the stored body back and assert the trailer is last.** The
 text that was submitted proves nothing.
@@ -112,10 +112,9 @@ Three wrong turns taken before finding this, none of them necessary:
   (measured — a `feat:` after 0.1.0 still came out 0.1.0). The trailer applies
   to one commit only.
 
-The working examples were sitting in `jmcvetta/career` the whole time: PRs
-#110, #111 and #112 each end with a footer *followed by* `Release-As:`. When
-something like this is claimed to have worked before, go and read the ones
-that worked.
+Working examples existed the whole time: pull requests that each end with a
+footer *followed by* `Release-As:`. When something like this is claimed to
+have worked before, go and read the ones that worked.
 
 ## What decides the first version
 
@@ -238,11 +237,11 @@ OpenTofu on a laptop.
 `vitest run ${VITEST_COVER:-}`. So coverage is a flag one command line reads,
 and there is no second command line anywhere that could fall behind the first.
 
-`jmcvetta/career` paid for this rule (its #64). Its `make cover` was written
-as "the coverage variant of `test`" and duplicated `test`'s pytest line. Then
-`test` grew a Ruby leg and two TypeScript legs, and `cover` did not, because a
-copy has no way to notice. CI ran `cover`, so 1045 vitest tests went unrun by
-the required check while every pull request stayed green.
+Another project paid for this rule. Its `make cover` was written as "the
+coverage variant of `test`" and duplicated `test`'s pytest line. Then `test`
+grew a Ruby leg and two TypeScript legs, and `cover` did not, because a copy
+has no way to notice. CI ran `cover`, so 1045 vitest tests went unrun by the
+required check while every pull request stayed green.
 
 The same shape is available here: `check` chains typecheck, build and test,
 and the build has to come before the test because `src/bundle.test.ts` runs

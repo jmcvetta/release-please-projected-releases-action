@@ -40,10 +40,9 @@ const workflow = parse(read("../.github/workflows/test.yml")) as {
 
 describe("the coverage entry point", () => {
   it("reaches the test suite through `check` rather than restating it", () => {
-    // The rule this repository inherited from jmcvetta/career's #64: a
-    // variant entry point calls the original. `cover` written as its own
-    // copy of `check`'s command line would keep passing while the two drift,
-    // and CI runs the coverage side.
+    // The rule: a variant entry point calls the original. `cover` written
+    // as its own copy of `check`'s command line would keep passing while the
+    // two drift, and CI runs the coverage side.
     expect(pkg.scripts.cover).toContain("npm run check");
   });
 

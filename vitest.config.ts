@@ -28,10 +28,9 @@ export default defineConfig({
       // dist/index.mjs is excluded by omission, and deliberately: it is a
       // 2.4 MB bundle of vendored release-please, and measuring it would
       // report this repository's few hundred lines against someone else's
-      // hundred thousand. scripts/bundle.mjs is outside for the same reason
-      // career's build script is -- its real test is packaging.test.ts and
-      // CI's staleness check, which prove the committed bundle *is* the
-      // source. A line-coverage number over it would report a gap that no
+      // hundred thousand. scripts/bundle.mjs is outside for the same
+      // reason -- its real test is packaging.test.ts and CI's staleness
+      // check, which prove the committed bundle *is* the source. A line-coverage number over it would report a gap that no
       // assertion should close.
       include: ["src/**/*.ts"],
       // The tests, and the fixtures the tests are built from. A fixture is

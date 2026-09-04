@@ -8,10 +8,9 @@
  * title is one that will never become a mergeable commit, and naming the
  * visible types in the message that explains why nothing releases.
  *
- * Inside jmcvetta/career the list was a fixed file, shared with a Python test
- * that pinned that repository's PR-title gate to it. Neither half of that
- * travels: another repository's changelog may recognize other types, and its
- * title gate is its own. So the list is resolved per run — from the
+ * A fixed list does not travel: another repository's changelog may recognize
+ * other types, and its title gate is its own. So the list is resolved per run
+ * — from the
  * `changelog-sections` in release-please's own config when it declares them,
  * from explicit inputs when the caller overrides them, and otherwise from the
  * conventionalcommits defaults in conventional-types.json. The action reports
