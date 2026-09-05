@@ -109,6 +109,13 @@ export interface Outcome {
   malformed: boolean;
   /** types is the changelog type list this run resolved. */
   types: TypeSet;
+  /**
+   * advisories are the notes rendered above the projection: the caller's,
+   * plus any this run found itself. The action re-emits them as runner
+   * annotations, so a note has to come back out rather than only reaching
+   * the comment.
+   */
+  advisories: readonly string[];
 }
 
 /**
@@ -151,6 +158,86 @@ export function quietLogger(): void {
 }
 
 /**
+ * missingConfig explains a manifest-mode read that found no file.
+ *
+ * This is the implicit half of the mode switch seen from the other side: the
+ * caller passed no `release-type`, so the projection went looking for the
+ * files, and a repository that releases without them has none. The bare
+ * ENOENT names the file and nothing else, which leaves the reader to work out
+ * that a missing file is how one mode is selected.
+ *
+ * Only when *neither* file is there, though. One of the two present is a
+ * manifest-mode repository missing half its configuration, and telling that
+ * repository to switch modes would be the confidently wrong answer this
+ * action exists to avoid giving.
+ */
+function missingConfig(path: string, root: string, counterpart?: string): string {
+  if (counterpart) {
+    return (
+      `no \`${path}\` in \`${root}\`, though \`${counterpart}\` is there.` +
+      " release-please's manifest mode reads both of them and this repository" +
+      " has one, so nothing here can say what it releases."
+    );
+  }
+  return (
+    `no \`${path}\` in \`${root}\`. release-please reads that file unless the` +
+    " release workflow passes it a `release-type:`, in which case there is no" +
+    " file and the configuration is on the workflow -- pass this action the" +
+    " same `release-type` and it will model that instead. If the repository" +
+    " does have one, point `repo-root` at the checkout holding it."
+  );
+}
+
+/** ModeContext is the checkout a mode was selected against. */
+interface ModeContext {
+  /** plain is whether `release-type` selected the non-manifest mode. */
+  plain: boolean;
+  /** root is the checkout the two files are looked for in. */
+  root: string;
+  configFile: string;
+  manifestFile: string;
+}
+
+/**
+ * modeAdvisories reports a checkout that contradicts the mode selected.
+ *
+ * `release-type` is the switch, and its *presence* is the whole of it: set,
+ * the configuration comes from the caller and the repository's own files are
+ * not read. That is release-please-action's rule and this action copies it,
+ * so a repository setting both gets the same answer from both -- but only if
+ * the release workflow sets both too. Set here and not there, release-please
+ * reads the files this projection ignored, and the projection describes a
+ * configuration that will never run.
+ *
+ * Which of those two it is cannot be known from here: it is in a workflow
+ * file, and reading that is a parser whose failures would land on the
+ * projection itself. So the note says what is true either way and leaves the
+ * reading to the reader, as the boundary warning does.
+ *
+ * No checkout at all is not this condition. A run with `changed-files: api`
+ * and no `actions/checkout` finds nothing, which is indistinguishable from a
+ * repository that has no such files -- and that repository is the one plain
+ * mode is for, so silence is right.
+ */
+function modeAdvisories(context: ModeContext): string[] {
+  if (!context.plain) return [];
+  const found = [context.configFile, context.manifestFile].filter((path) =>
+    existsSync(resolve(context.root, path)),
+  );
+  if (found.length === 0) return [];
+  const names = found.map((path) => `\`${path}\``).join(" and ");
+  return [
+    `- \`release-type\` is set, so this projection is release-please's` +
+      ` non-manifest mode and the ${names} in the checkout ${found.length > 1 ? "were" : "was"}` +
+      " not read. release-please does the same when its own workflow passes" +
+      " `release-type:`, and reads the file when it does not -- so if the" +
+      " release workflow has no `release-type:`, this projection describes a" +
+      " different configuration from the one that will run. Clearing" +
+      " `release-type` here reads the files instead.",
+  ];
+}
+
+/**
  * buildComment renders the projected-releases comment for one pull request.
  *
  * A malformed title short-circuits the whole thing: such a title is not
@@ -162,19 +249,34 @@ export async function buildComment(options: RunOptions): Promise<Outcome> {
   const root = options.repoRoot ?? ".";
   const configFile = options.configFile ?? DEFAULT_CONFIG_FILE;
   const manifestFile = options.manifestFile ?? DEFAULT_MANIFEST_FILE;
-  const readJson = (path: string) =>
-    JSON.parse(readFileSync(resolve(root, path), "utf8")) as Record<
-      string,
-      unknown
-    >;
+  const readJson = (path: string, counterpart: string) => {
+    const full = resolve(root, path);
+    // A missing file here is the mode switch read the wrong way round, and
+    // the bare ENOENT says nothing about that. See modeAdvisories.
+    if (!existsSync(full)) {
+      const other = existsSync(resolve(root, counterpart)) ? counterpart : undefined;
+      throw new Error(missingConfig(path, root, other));
+    }
+    return JSON.parse(readFileSync(full, "utf8")) as Record<string, unknown>;
+  };
 
   // Plain mode has no files to read. The empty objects stand in so the rest
   // of the pipeline keeps one shape; `project` ignores them when `plain` is
   // set.
-  const config = options.plain ? {} : readJson(configFile);
+  const config = options.plain ? {} : readJson(configFile, manifestFile);
   const manifest = options.plain
     ? {}
-    : (readJson(manifestFile) as Record<string, string>);
+    : (readJson(manifestFile, configFile) as Record<string, string>);
+
+  const advisories = [
+    ...(options.advisories ?? []),
+    ...modeAdvisories({
+      plain: options.plain !== undefined,
+      root,
+      configFile,
+      manifestFile,
+    }),
+  ];
 
   const types = resolveTypes({
     // A plain-mode caller declares its changelog sections on the releaser
@@ -211,11 +313,11 @@ export async function buildComment(options: RunOptions): Promise<Outcome> {
     ...(options.releasePrs ? { releasePrs: options.releasePrs } : {}),
     ...(options.headSha ? { headSha: options.headSha } : {}),
     ...(options.runUrl ? { runUrl: options.runUrl } : {}),
-    ...(options.advisories ? { advisories: options.advisories } : {}),
+    ...(advisories.length ? { advisories } : {}),
     ...(options.now ? { now: options.now } : {}),
   });
 
-  return { body, projection, malformed, types };
+  return { body, projection, malformed, types, advisories };
 }
 
 async function projectPullRequest(

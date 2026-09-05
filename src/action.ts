@@ -145,7 +145,10 @@ export async function action(env: Env = process.env): Promise<void> {
     env,
   );
   if (boolInput("step-summary", true, env)) summary(outcome.body, env);
-  for (const advisory of advisories) warning(advisory.replace(/^- /, ""));
+  // From the outcome rather than the local list: the projection contributes
+  // notes of its own, and an advisory that reaches the comment and not the
+  // run's annotations is one nobody looking at a red-adjacent check will see.
+  for (const advisory of outcome.advisories) warning(advisory.replace(/^- /, ""));
 
   if (mode === "render-and-comment") {
     await post(client, number, header, outcome.body);

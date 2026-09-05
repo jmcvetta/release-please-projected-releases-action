@@ -100,9 +100,17 @@ inputs:
       Set this for a repository release-please runs WITHOUT a manifest --
       `release-type:` on release-please-action, no release-please-config.json
       and no .release-please-manifest.json. One package, configured here
-      rather than read from the checkout, so `config-file`, `manifest-file`
-      and `repo-root` are unused. Values are release-please's own release
-      types (`node`, `python`, `simple`, ...). Leave empty for manifest mode.
+      rather than read from the checkout, so `config-file` and `manifest-file`
+      are unused. (`repo-root` still is: the release strategy opens the
+      package file to derive the component name.) Values are release-please's
+      own release types (`node`, `python`, `simple`, ...). Leave empty for
+      manifest mode.
+
+      Its presence is the mode switch, exactly as on release-please-action,
+      so it has to match what your release workflow passes: set here and not
+      there, release-please reads the config files this projection ignored.
+      Setting it with those files in the checkout is a warning on the
+      comment, not an error.
     required: false
     default: ""
   package-path:
@@ -116,6 +124,9 @@ inputs:
       Component name for the single package, with `release-type`. Usually
       unnecessary: the release type derives one (a `node` release takes the
       package.json name) and this action asks release-please for it.
+      release-please-action exposes no input for this, so a repository whose
+      releases it cuts cannot set one -- leave this empty unless something
+      that can (release-please's own CLI) cuts them.
     required: false
     default: ""
   include-component-in-tag:
@@ -126,7 +137,9 @@ inputs:
     required: false
     default: ""
   tag-separator:
-    description: What separates component from version in a tag, with `release-type`.
+    description: >-
+      What separates component from version in a tag, with `release-type`.
+      Like `component`, release-please-action exposes no input for this.
     required: false
     default: ""
 

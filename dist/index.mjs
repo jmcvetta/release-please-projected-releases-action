@@ -62491,13 +62491,46 @@ function quietLogger() {
     fatal: toStderr
   });
 }
+function missingConfig(path, root, counterpart) {
+  if (counterpart) {
+    return `no \`${path}\` in \`${root}\`, though \`${counterpart}\` is there. release-please's manifest mode reads both of them and this repository has one, so nothing here can say what it releases.`;
+  }
+  return `no \`${path}\` in \`${root}\`. release-please reads that file unless the release workflow passes it a \`release-type:\`, in which case there is no file and the configuration is on the workflow -- pass this action the same \`release-type\` and it will model that instead. If the repository does have one, point \`repo-root\` at the checkout holding it.`;
+}
+function modeAdvisories(context) {
+  if (!context.plain) return [];
+  const found = [context.configFile, context.manifestFile].filter(
+    (path) => existsSync(resolve(context.root, path))
+  );
+  if (found.length === 0) return [];
+  const names = found.map((path) => `\`${path}\``).join(" and ");
+  return [
+    `- \`release-type\` is set, so this projection is release-please's non-manifest mode and the ${names} in the checkout ${found.length > 1 ? "were" : "was"} not read. release-please does the same when its own workflow passes \`release-type:\`, and reads the file when it does not -- so if the release workflow has no \`release-type:\`, this projection describes a different configuration from the one that will run. Clearing \`release-type\` here reads the files instead.`
+  ];
+}
 async function buildComment(options) {
   const root = options.repoRoot ?? ".";
   const configFile = options.configFile ?? DEFAULT_CONFIG_FILE;
   const manifestFile = options.manifestFile ?? DEFAULT_MANIFEST_FILE;
-  const readJson = (path) => JSON.parse(readFileSync2(resolve(root, path), "utf8"));
-  const config = options.plain ? {} : readJson(configFile);
-  const manifest = options.plain ? {} : readJson(manifestFile);
+  const readJson = (path, counterpart) => {
+    const full = resolve(root, path);
+    if (!existsSync(full)) {
+      const other = existsSync(resolve(root, counterpart)) ? counterpart : void 0;
+      throw new Error(missingConfig(path, root, other));
+    }
+    return JSON.parse(readFileSync2(full, "utf8"));
+  };
+  const config = options.plain ? {} : readJson(configFile, manifestFile);
+  const manifest = options.plain ? {} : readJson(manifestFile, configFile);
+  const advisories = [
+    ...options.advisories ?? [],
+    ...modeAdvisories({
+      plain: options.plain !== void 0,
+      root,
+      configFile,
+      manifestFile
+    })
+  ];
   const types = resolveTypes({
     // A plain-mode caller declares its changelog sections on the releaser
     // config rather than in a file, and they mean the same thing: the
@@ -62520,10 +62553,10 @@ async function buildComment(options) {
     ...options.releasePrs ? { releasePrs: options.releasePrs } : {},
     ...options.headSha ? { headSha: options.headSha } : {},
     ...options.runUrl ? { runUrl: options.runUrl } : {},
-    ...options.advisories ? { advisories: options.advisories } : {},
+    ...advisories.length ? { advisories } : {},
     ...options.now ? { now: options.now } : {}
   });
-  return { body, projection, malformed, types };
+  return { body, projection, malformed, types, advisories };
 }
 async function projectPullRequest(options, config, manifest, files) {
   const github = options.github ?? await import_release_please3.GitHub.create({
@@ -62729,7 +62762,7 @@ async function action(env = process.env) {
     env
   );
   if (boolInput("step-summary", true, env)) summary(outcome.body, env);
-  for (const advisory of advisories) warning(advisory.replace(/^- /, ""));
+  for (const advisory of outcome.advisories) warning(advisory.replace(/^- /, ""));
   if (mode === "render-and-comment") {
     await post(client, number, header, outcome.body);
   }

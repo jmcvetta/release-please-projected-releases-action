@@ -101,3 +101,15 @@ release workflow passes it. Pass this action the same value:
         with:
           release-type: node
 ```
+
+Setting it is what selects that mode — here as on `release-please-action`,
+where its presence is likewise the switch — so the two have to agree. Set it
+where your release workflow does not and the projection describes a
+configuration that will never run; the comment says so when it can tell, which
+is when the config files are in the checkout.
+
+`component` and `tag-separator` have no counterpart on `release-please-action`
+at all, so leave them alone unless something else cuts your releases. Nor,
+going the other way, does this action model `versioning-strategy` or
+`release-as`: set either in your release workflow and the projected version
+will not match the one released.
