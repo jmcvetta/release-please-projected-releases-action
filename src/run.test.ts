@@ -14,7 +14,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setLogger } from "release-please";
-import { fakeScm } from "./fake-scm.fixture.js";
+import { fakeScm, RELEASE_SHA } from "./fake-scm.fixture.js";
 import { buildComment, graphqlRoot } from "./run.js";
 import type { quietLogger as QuietLogger } from "./run.js";
 
@@ -170,6 +170,105 @@ describe("buildComment", () => {
     const out = await comment("feat: a thing");
     expect(out).toContain("Projected for `abcdef1`");
     expect(out).toContain("re-rendered 2026-09-01 12:00 UTC");
+  });
+});
+
+/**
+ * plainOutcome runs the non-manifest mode against a checkout the caller
+ * describes: `root` is what the action would be pointed at, which is the
+ * whole input to the mode check.
+ */
+async function plainOutcome(root: string) {
+  return buildComment({
+    owner: "acme",
+    repo: "widgets",
+    token: "",
+    title: "feat: a thing",
+    body: "",
+    number: 7,
+    base: "master",
+    headSha: "abcdef1234567890",
+    headBranch: "topic",
+    files: ["src/x.ts"],
+    repoRoot: root,
+    plain: { releaseType: "node" },
+    github: fakeScm({
+      config: {},
+      manifest: {},
+      releases: [{ tagName: "v1.0.0", sha: RELEASE_SHA }],
+      files: { "package.json": JSON.stringify({ name: "widgets", version: "1.0.0" }) },
+    }),
+    now: new Date("2026-09-01T12:00:00Z"),
+  });
+}
+
+describe("buildComment's mode switch", () => {
+  // The failure this is about is silent: the projection renders, and it
+  // describes a release-please configured differently from the one the merge
+  // will get. Nothing else in the run says so.
+  it("warns when plain mode ignored the config files in the checkout", async () => {
+    const outcome = await plainOutcome(fixture());
+    expect(outcome.body).toContain("`release-type` is set");
+    expect(outcome.body).toContain("`release-please-config.json`");
+    expect(outcome.body).toContain("in the checkout were not read");
+    // Out through the outcome as well, because the action turns each of these
+    // into a runner annotation and only sees what comes back.
+    expect(outcome.advisories.some((a) => a.includes("release-type"))).toBe(true);
+  });
+
+  // The ordinary plain-mode repository. A checkout with no such files is what
+  // the mode is for, and so is no checkout at all -- neither can be told from
+  // the other here, and both are right.
+  it("says nothing when there are no files to ignore", async () => {
+    const outcome = await plainOutcome(mkdtempSync(join(tmpdir(), "projected-releases-")));
+    expect(outcome.advisories).toEqual([]);
+    expect(outcome.body).not.toContain("`release-type` is set");
+  });
+
+  // The same switch read the other way round: no `release-type`, so the files
+  // were looked for, and a plain-mode repository has none. The bare ENOENT
+  // names the file and leaves the reader to discover that its absence is how
+  // a mode gets selected.
+  it("names the mode switch when manifest mode has no file to read", async () => {
+    const empty = mkdtempSync(join(tmpdir(), "projected-releases-"));
+    await expect(
+      buildComment({
+        owner: "acme",
+        repo: "widgets",
+        token: "",
+        title: "feat: a thing",
+        body: "",
+        number: 7,
+        base: "master",
+        headSha: "abcdef1234567890",
+        headBranch: "topic",
+        files: ["src/x.ts"],
+        repoRoot: empty,
+      }),
+    ).rejects.toThrow(/no `release-please-config\.json`.*`release-type`/s);
+  });
+
+  // Half a manifest configuration is not a mode question, and answering it
+  // with "set `release-type`" would tell a manifest repository to stop being
+  // one.
+  it("does not offer the other mode to a repository missing one file", async () => {
+    const root = mkdtempSync(join(tmpdir(), "projected-releases-"));
+    writeFileSync(join(root, "release-please-config.json"), JSON.stringify(CONFIG));
+    await expect(
+      buildComment({
+        owner: "acme",
+        repo: "widgets",
+        token: "",
+        title: "feat: a thing",
+        body: "",
+        number: 7,
+        base: "master",
+        headSha: "abcdef1234567890",
+        headBranch: "topic",
+        files: ["src/x.ts"],
+        repoRoot: root,
+      }),
+    ).rejects.toThrow(/no `\.release-please-manifest\.json`.*is there/s);
   });
 });
 

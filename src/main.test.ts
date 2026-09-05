@@ -16,6 +16,10 @@ import { cli } from "./main.js";
 import { startFakeGitHub } from "./fake-github-server.fixture.js";
 import type { FakeGitHub, FakeRepo } from "./fake-github-server.fixture.js";
 
+/** RELEASED_SHA is the commit the fixture's release points at, which is
+ * what bounds the commit walk. */
+const RELEASED_SHA = "1".repeat(40);
+
 const REPO: FakeRepo = {
   owner: "acme",
   repo: "widgets",
@@ -148,6 +152,104 @@ describe("cli", () => {
     await expect(
       cli(await flags(["--include-component-in-tag", "yes"])),
     ).rejects.toThrow(/--include-component-in-tag must be true or false/);
+  });
+
+  // Everything below is measured against a repository that has already
+  // released 1.0.0, because the first release comes from the strategy's
+  // initial version and would hide what the bump did.
+  const released: Partial<FakeRepo> = {
+    commits: [{ sha: RELEASED_SHA, message: "chore: release 1.0.0", files: [] }],
+    releases: [{ tagName: "v1.0.0", sha: RELEASED_SHA }],
+    files: { "package.json": JSON.stringify({ name: "widgets", version: "1.0.0" }) },
+  };
+
+  it("bumps the way the default strategy does when nothing says otherwise", async () => {
+    await cli(await flags([], released));
+    expect(printed()).toContain("**1.1.0**");
+  });
+
+  // The gap this closes: a release workflow passing `versioning-strategy`
+  // releases a feature as a patch, and a projection with no such input said
+  // minor -- the right answer for a differently configured repository.
+  it("bumps as the versioning strategy says, not as the type implies", async () => {
+    await cli(await flags(["--versioning-strategy", "always-bump-patch"], released));
+    expect(printed()).toContain("**1.0.1**");
+    expect(printed()).not.toContain("1.1.0");
+  });
+
+  it("releases the version a sticky release-as forces", async () => {
+    await cli(await flags(["--release-as", "2.4.0"], released));
+    expect(printed()).toContain("**2.4.0**");
+  });
+
+  // The command line used to build the plain configuration itself and
+  // validated none of it, so this reached release-please as a release type it
+  // has never heard of. Both entry points read one builder now.
+  // Manifest mode, which is what a repository with the two files gets and
+  // what `--release-type` switches off. Every other case here passes that
+  // flag, so without this the flagless half of the switch -- and the config
+  // and manifest flags that only mean anything there -- ran in no test of
+  // either entry point.
+  describe("without a release type", () => {
+    const CONFIG = { packages: { ".": { "release-type": "node" } } };
+    const MANIFEST = { ".": "1.0.0" };
+
+    /** checkout writes the two files the way a repository carrying them
+     * would, and returns the root to read them from. */
+    function checkout(): string {
+      const root = tmp();
+      writeFileSync(join(root, "release-please-config.json"), JSON.stringify(CONFIG));
+      writeFileSync(join(root, ".release-please-manifest.json"), JSON.stringify(MANIFEST));
+      return root;
+    }
+
+    /** without drops `--release-type` from the ordinary invocation. */
+    async function without(extra: string[], over: Partial<FakeRepo> = {}) {
+      const argv = await flags(extra, {
+        files: {
+          "package.json": JSON.stringify({ name: "widgets", version: "1.0.0" }),
+          "release-please-config.json": JSON.stringify(CONFIG),
+          ".release-please-manifest.json": JSON.stringify(MANIFEST),
+        },
+        ...over,
+      });
+      const at = argv.indexOf("--release-type");
+      argv.splice(at, 2);
+      return argv;
+    }
+
+    it("projects from the files in the checkout", async () => {
+      await cli(await without(["--repo-root", checkout()]));
+      expect(printed()).toContain("**1.1.0**");
+    });
+
+    it("says which mode a checkout with no files is missing", async () => {
+      await expect(cli(await without(["--repo-root", tmp()]))).rejects.toThrow(
+        /no `release-please-config\.json`.*`release-type`/s,
+      );
+    });
+  });
+
+  it("names the release types when the given one is not among them", async () => {
+    await expect(
+      cli(await flags(["--release-type", "nodejs"])),
+    ).rejects.toThrow(/--release-type must be one of .*\bnode\b.*got `nodejs`/s);
+  });
+
+  it("names the strategies when the versioning one is not among them", async () => {
+    await expect(
+      cli(await flags(["--versioning-strategy", "always-bump-path"])),
+    ).rejects.toThrow(
+      /--versioning-strategy must be one of .*\balways-bump-patch\b.*got `always-bump-path`/s,
+    );
+  });
+
+  // A version release-please cannot parse otherwise fails from inside the
+  // strategy, after the walk, with nothing naming the flag that carried it.
+  it("refuses a release-as that is not a version", async () => {
+    await expect(
+      cli(await flags(["--release-as", "v2.4.0"])),
+    ).rejects.toThrow(/--release-as must be a version, like `1\.2\.3`; got `v2\.4\.0`/);
   });
 
   it("reads a package file the pull request adds, from the head", async () => {

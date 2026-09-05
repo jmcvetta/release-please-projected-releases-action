@@ -101,3 +101,19 @@ release workflow passes it. Pass this action the same value:
         with:
           release-type: node
 ```
+
+Setting it is what selects that mode — here as on `release-please-action`,
+where its presence is likewise the switch — so the two have to agree. Set it
+where your release workflow does not and the projection describes a
+configuration that will never run; the comment says so when it can tell, which
+is when the config files are in the checkout.
+
+`versioning-strategy` and `release-as` are passed the same way, and matter for
+the same reason: a workflow bumping with `always-bump-patch` releases a feature
+as a patch, and `release-as` is sticky — it holds until the line is removed. A
+projection that has not been told about either reports the version a default
+repository would get.
+
+`component` and `tag-separator` go the other way: `release-please-action` has
+no input for them at all, so leave them alone unless something other than it
+cuts your releases.
