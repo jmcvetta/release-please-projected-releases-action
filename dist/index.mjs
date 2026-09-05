@@ -62541,14 +62541,27 @@ function missingConfig(path, root, counterpart) {
 }
 function modeAdvisories(context) {
   if (!context.plain) return [];
+  const notes = [];
   const found = [context.configFile, context.manifestFile].filter(
     (path) => existsSync(resolve(context.root, path))
   );
-  if (found.length === 0) return [];
-  const names = found.map((path) => `\`${path}\``).join(" and ");
-  return [
-    `- \`release-type\` is set, so this projection is release-please's non-manifest mode and the ${names} in the checkout ${found.length > 1 ? "were" : "was"} not read. release-please does the same when its own workflow passes \`release-type:\`, and reads the file when it does not -- so if the release workflow has no \`release-type:\`, this projection describes a different configuration from the one that will run. Clearing \`release-type\` here reads the files instead.`
-  ];
+  if (found.length > 0) {
+    const names = found.map((path) => `\`${path}\``).join(" and ");
+    notes.push(
+      `- \`release-type\` is set, so this projection is release-please's non-manifest mode and the ${names} in the checkout ${found.length > 1 ? "were" : "was"} not read. release-please does the same when its own workflow passes \`release-type:\`, and reads the file when it does not -- so if the release workflow has no \`release-type:\`, this projection describes a different configuration from the one that will run. Clearing \`release-type\` here reads the files instead.`
+    );
+  }
+  const unread = [
+    ["config-file", context.configFile, DEFAULT_CONFIG_FILE],
+    ["manifest-file", context.manifestFile, DEFAULT_MANIFEST_FILE]
+  ].filter(([, given, fallback]) => given !== fallback).map(([option]) => option);
+  if (unread.length > 0) {
+    const names = unread.map((option) => `\`${option}\``).join(" and ");
+    notes.push(
+      `- ${names} ${unread.length > 1 ? "name paths" : "names a path"} this projection does not read. \`release-type\` selects release-please's non-manifest mode, where the configuration comes from the options rather than from a file. Clear \`release-type\` to read ${unread.length > 1 ? "them" : "it"}, or drop ${unread.length > 1 ? "them" : "it"} to say what this projection does.`
+    );
+  }
+  return notes;
 }
 async function buildComment(options) {
   const root = options.repoRoot ?? ".";

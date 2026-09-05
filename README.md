@@ -106,7 +106,8 @@ Setting it is what selects that mode — here as on `release-please-action`,
 where its presence is likewise the switch — so the two have to agree. Set it
 where your release workflow does not and the projection describes a
 configuration that will never run; the comment says so when it can tell, which
-is when the config files are in the checkout.
+is when the config files are in the checkout, or when a `config-file` or
+`manifest-file` path was given for a file this mode never opens.
 
 `versioning-strategy` and `release-as` are passed the same way, and matter for
 the same reason: a workflow bumping with `always-bump-patch` releases a feature

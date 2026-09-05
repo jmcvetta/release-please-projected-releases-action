@@ -221,20 +221,54 @@ interface ModeContext {
  */
 function modeAdvisories(context: ModeContext): string[] {
   if (!context.plain) return [];
+  const notes: string[] = [];
+
   const found = [context.configFile, context.manifestFile].filter((path) =>
     existsSync(resolve(context.root, path)),
   );
-  if (found.length === 0) return [];
-  const names = found.map((path) => `\`${path}\``).join(" and ");
-  return [
-    `- \`release-type\` is set, so this projection is release-please's` +
-      ` non-manifest mode and the ${names} in the checkout ${found.length > 1 ? "were" : "was"}` +
-      " not read. release-please does the same when its own workflow passes" +
-      " `release-type:`, and reads the file when it does not -- so if the" +
-      " release workflow has no `release-type:`, this projection describes a" +
-      " different configuration from the one that will run. Clearing" +
-      " `release-type` here reads the files instead.",
-  ];
+  if (found.length > 0) {
+    const names = found.map((path) => `\`${path}\``).join(" and ");
+    notes.push(
+      `- \`release-type\` is set, so this projection is release-please's` +
+        ` non-manifest mode and the ${names} in the checkout ${found.length > 1 ? "were" : "was"}` +
+        " not read. release-please does the same when its own workflow passes" +
+        " `release-type:`, and reads the file when it does not -- so if the" +
+        " release workflow has no `release-type:`, this projection describes a" +
+        " different configuration from the one that will run. Clearing" +
+        " `release-type` here reads the files instead.",
+    );
+  }
+
+  // The other half of the same contradiction, and the one the checkout cannot
+  // show: naming a path for a file this mode never opens. Both options
+  // default to release-please's own file names, so a value that differs from
+  // the default is one somebody typed on purpose -- and typing it says the
+  // repository has a manifest, which is what `release-type` says it does not.
+  // Nothing is wrong with the projection; the caller is describing a mode it
+  // did not select, which is where a mismatch with the release workflow shows
+  // up first.
+  const unread = (
+    [
+      ["config-file", context.configFile, DEFAULT_CONFIG_FILE],
+      ["manifest-file", context.manifestFile, DEFAULT_MANIFEST_FILE],
+    ] as const
+  )
+    .filter(([, given, fallback]) => given !== fallback)
+    .map(([option]) => option);
+  if (unread.length > 0) {
+    const names = unread.map((option) => `\`${option}\``).join(" and ");
+    notes.push(
+      `- ${names} ${unread.length > 1 ? "name paths" : "names a path"} this` +
+        " projection does not read. `release-type` selects release-please's" +
+        " non-manifest mode, where the configuration comes from the options" +
+        ` rather than from a file. Clear \`release-type\` to read` +
+        ` ${unread.length > 1 ? "them" : "it"}, or drop` +
+        ` ${unread.length > 1 ? "them" : "it"} to say what this projection` +
+        " does.",
+    );
+  }
+
+  return notes;
 }
 
 /**

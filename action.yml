@@ -83,11 +83,17 @@ inputs:
     default: ""
 
   config-file:
-    description: Path to release-please-config.json.
+    description: >-
+      Path to release-please-config.json. Manifest mode only: with
+      `release-type` set nothing reads it, and a path given here anyway is a
+      note on the comment, since naming one says the repository has a manifest
+      and `release-type` says it does not.
     required: false
     default: release-please-config.json
   manifest-file:
-    description: Path to .release-please-manifest.json.
+    description: >-
+      Path to .release-please-manifest.json. Manifest mode only, on the same
+      terms as `config-file`.
     required: false
     default: .release-please-manifest.json
   repo-root:
@@ -110,7 +116,8 @@ inputs:
       so it has to match what your release workflow passes: set here and not
       there, release-please reads the config files this projection ignored.
       Setting it with those files in the checkout is a warning on the
-      comment, not an error.
+      comment, not an error, and so is setting it alongside a `config-file`
+      or `manifest-file` path.
     required: false
     default: ""
   package-path:

@@ -179,7 +179,12 @@ describe("buildComment", () => {
  * whole input to the mode check.
  */
 async function plainOutcome(root: string) {
-  return buildComment({
+  return buildComment(plainOptions(root));
+}
+
+/** plainOptions is the same run, unrun, for a case that varies one option. */
+function plainOptions(root: string) {
+  return {
     owner: "acme",
     repo: "widgets",
     token: "",
@@ -199,7 +204,7 @@ async function plainOutcome(root: string) {
       files: { "package.json": JSON.stringify({ name: "widgets", version: "1.0.0" }) },
     }),
     now: new Date("2026-09-01T12:00:00Z"),
-  });
+  };
 }
 
 describe("buildComment's mode switch", () => {
@@ -223,6 +228,45 @@ describe("buildComment's mode switch", () => {
     const outcome = await plainOutcome(mkdtempSync(join(tmpdir(), "projected-releases-")));
     expect(outcome.advisories).toEqual([]);
     expect(outcome.body).not.toContain("`release-type` is set");
+  });
+
+  // A path typed for a file this mode never opens. The checkout cannot show
+  // this one -- the file need not exist, and usually does not -- so it is the
+  // caller's own words that contradict the mode it selected.
+  it("warns when a path was given for a file plain mode never opens", async () => {
+    const empty = mkdtempSync(join(tmpdir(), "projected-releases-"));
+    const outcome = await buildComment({
+      ...plainOptions(empty),
+      configFile: "packages/release-please-config.json",
+    });
+    expect(outcome.body).toContain("`config-file` names a path");
+    expect(outcome.body).not.toContain("`manifest-file`");
+    expect(outcome.advisories).toHaveLength(1);
+  });
+
+  it("names both when both were given, and says it in the plural", async () => {
+    const empty = mkdtempSync(join(tmpdir(), "projected-releases-"));
+    const outcome = await buildComment({
+      ...plainOptions(empty),
+      configFile: "cfg.json",
+      manifestFile: "versions.json",
+    });
+    expect(outcome.body).toContain("`config-file` and `manifest-file` name paths");
+    expect(outcome.body).toContain("Clear `release-type` to read them");
+  });
+
+  // The default is not a value somebody typed. Passing release-please's own
+  // file names is what every caller that passes them at all does, so warning
+  // on that would fire on the ordinary plain-mode run and teach the reader to
+  // ignore the note.
+  it("says nothing when the paths are release-please's own defaults", async () => {
+    const empty = mkdtempSync(join(tmpdir(), "projected-releases-"));
+    const outcome = await buildComment({
+      ...plainOptions(empty),
+      configFile: "release-please-config.json",
+      manifestFile: ".release-please-manifest.json",
+    });
+    expect(outcome.advisories).toEqual([]);
   });
 
   // The same switch read the other way round: no `release-type`, so the files
