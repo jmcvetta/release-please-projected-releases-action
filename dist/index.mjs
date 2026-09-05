@@ -8979,8 +8979,8 @@ var require_compiler = __commonJS({
       NumberLiteral: function NumberLiteral(number) {
         this.opcode("pushLiteral", number.value);
       },
-      BooleanLiteral: function BooleanLiteral(bool) {
-        this.opcode("pushLiteral", bool.value);
+      BooleanLiteral: function BooleanLiteral(bool2) {
+        this.opcode("pushLiteral", bool2.value);
       },
       UndefinedLiteral: function UndefinedLiteral() {
         this.opcode("pushLiteral", "undefined");
@@ -12146,8 +12146,8 @@ var require_printer = __commonJS({
     PrintVisitor.prototype.NumberLiteral = function(number) {
       return "NUMBER{" + number.value + "}";
     };
-    PrintVisitor.prototype.BooleanLiteral = function(bool) {
-      return "BOOLEAN{" + bool.value + "}";
+    PrintVisitor.prototype.BooleanLiteral = function(bool2) {
+      return "BOOLEAN{" + bool2.value + "}";
     };
     PrintVisitor.prototype.UndefinedLiteral = function() {
       return "UNDEFINED";
@@ -13618,10 +13618,10 @@ var require_versioning_strategy_factory = __commonJS({
       delete versioningTypes[name2];
     }
     exports2.unregisterVersioningStrategy = unregisterVersioningStrategy;
-    function getVersioningStrategyTypes() {
+    function getVersioningStrategyTypes2() {
       return Object.keys(versioningTypes).sort();
     }
-    exports2.getVersioningStrategyTypes = getVersioningStrategyTypes;
+    exports2.getVersioningStrategyTypes = getVersioningStrategyTypes2;
   }
 });
 
@@ -39464,7 +39464,7 @@ var require_schema2 = __commonJS({
     var _null = require_null2();
     var seq = require_seq2();
     var string = require_string();
-    var bool = require_bool2();
+    var bool2 = require_bool2();
     var float = require_float2();
     var int = require_int2();
     var schema = [
@@ -39472,7 +39472,7 @@ var require_schema2 = __commonJS({
       seq.seq,
       string.string,
       _null.nullTag,
-      bool.boolTag,
+      bool2.boolTag,
       int.intOct,
       int.int,
       int.intHex,
@@ -40119,7 +40119,7 @@ var require_schema4 = __commonJS({
     var seq = require_seq2();
     var string = require_string();
     var binary = require_binary2();
-    var bool = require_bool3();
+    var bool2 = require_bool3();
     var float = require_float3();
     var int = require_int3();
     var merge = require_merge2();
@@ -40132,8 +40132,8 @@ var require_schema4 = __commonJS({
       seq.seq,
       string.string,
       _null.nullTag,
-      bool.trueTag,
-      bool.falseTag,
+      bool2.trueTag,
+      bool2.falseTag,
       int.intBin,
       int.intOct,
       int.int,
@@ -40162,7 +40162,7 @@ var require_tags = __commonJS({
     var _null = require_null2();
     var seq = require_seq2();
     var string = require_string();
-    var bool = require_bool2();
+    var bool2 = require_bool2();
     var float = require_float2();
     var int = require_int2();
     var schema = require_schema2();
@@ -40183,7 +40183,7 @@ var require_tags = __commonJS({
     ]);
     var tagsByName = {
       binary: binary.binary,
-      bool: bool.boolTag,
+      bool: bool2.boolTag,
       float: float.float,
       floatExp: float.floatExp,
       floatNaN: float.floatNaN,
@@ -61606,11 +61606,56 @@ function mergeAdvisories(context) {
   return advisories;
 }
 
+// src/plain.ts
+var import_release_please = __toESM(require_src2(), 1);
+var ANCHORED = /^\d+\.\d+\.\d+(?:-[^+\s]+)?(?:\+\S+)?$/;
+function plainConfig(read, named) {
+  const value = (name2) => (read(name2) ?? "").trim();
+  const releaseType = value("release-type");
+  if (!releaseType) return void 0;
+  oneOf(named, "release-type", releaseType, (0, import_release_please.getReleaserTypes)());
+  const path = value("package-path");
+  const component = value("component");
+  const separator = value("tag-separator");
+  const includeComponentInTag = value("include-component-in-tag");
+  const versioning = value("versioning-strategy");
+  if (versioning) {
+    oneOf(named, "versioning-strategy", versioning, (0, import_release_please.getVersioningStrategyTypes)());
+  }
+  const releaseAs = value("release-as");
+  if (releaseAs && !ANCHORED.test(releaseAs)) {
+    throw new Error(
+      `${named("release-as")} must be a version, like \`1.2.3\`; got \`${releaseAs}\``
+    );
+  }
+  return {
+    releaseType,
+    ...path ? { path } : {},
+    ...component ? { component } : {},
+    ...separator ? { tagSeparator: separator } : {},
+    ...includeComponentInTag ? { includeComponentInTag: bool(named, "include-component-in-tag", includeComponentInTag) } : {},
+    ...versioning ? { versioning } : {},
+    ...releaseAs ? { releaseAs } : {}
+  };
+}
+function oneOf(named, name2, value, known) {
+  if (known.includes(value)) return;
+  throw new Error(
+    `${named(name2)} must be one of ${[...known].sort().join(", ")}; got \`${value}\``
+  );
+}
+function bool(named, name2, value) {
+  const text = value.toLowerCase();
+  if (text === "true") return true;
+  if (text === "false") return false;
+  throw new Error(`${named(name2)} must be true or false, got \`${value}\``);
+}
+
 // src/project.ts
-var import_release_please2 = __toESM(require_src2(), 1);
+var import_release_please3 = __toESM(require_src2(), 1);
 
 // src/boundary.ts
-var import_release_please = __toESM(require_src2(), 1);
+var import_release_please2 = __toESM(require_src2(), 1);
 var UNRESOLVED = /^No latest release found for path: (.*), component: (.*), but a previous version \((.*)\) was specified in the manifest\.$/;
 function parseUnresolvedBoundary(message) {
   const found = UNRESOLVED.exec(message);
@@ -61646,7 +61691,7 @@ function watchBoundaries(sink) {
   }
   watching = true;
   seen = [];
-  (0, import_release_please.setLogger)(record);
+  (0, import_release_please2.setLogger)(record);
 }
 function armBoundaryWatch() {
   if (!watching) watchBoundaries(SILENT);
@@ -62052,13 +62097,13 @@ async function project(options) {
     ...tuned["commit-search-depth"] === void 0 ? { commitSearchDepth: COMMIT_SEARCH_DEPTH } : {},
     ...tuned["commit-batch-size"] === void 0 ? { commitBatchSize: COMMIT_BATCH_SIZE } : {}
   };
-  const build = (github) => plain ? import_release_please2.Manifest.fromConfig(
+  const build = (github) => plain ? import_release_please3.Manifest.fromConfig(
     github,
     options.commit.baseBranch,
     plain,
     manifestOptions,
     plain.path ?? ROOT_PACKAGE_PATH
-  ) : import_release_please2.Manifest.fromManifest(
+  ) : import_release_please3.Manifest.fromManifest(
     github,
     options.commit.baseBranch,
     configFile,
@@ -62128,9 +62173,6 @@ function mergeUnresolved(head, base) {
   return [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
 }
 
-// src/action.ts
-var import_release_please4 = __toESM(require_src2(), 1);
-
 // src/release-prs.ts
 function indexReleasePrs(prs, prefix = DEFAULT_TYPES.releaseBranchPrefix, base) {
   const index = /* @__PURE__ */ new Map();
@@ -62152,7 +62194,7 @@ function loadReleasePrs(text, prefix = DEFAULT_TYPES.releaseBranchPrefix, base) 
 }
 
 // src/run.ts
-var import_release_please3 = __toESM(require_src2(), 1);
+var import_release_please4 = __toESM(require_src2(), 1);
 import { existsSync, readFileSync as readFileSync2 } from "node:fs";
 import { resolve } from "node:path";
 
@@ -62559,7 +62601,7 @@ async function buildComment(options) {
   return { body, projection, malformed, types, advisories };
 }
 async function projectPullRequest(options, config, manifest, files) {
-  const github = options.github ?? await import_release_please3.GitHub.create({
+  const github = options.github ?? await import_release_please4.GitHub.create({
     owner: options.owner,
     repo: options.repo,
     defaultBranch: options.base,
@@ -62721,6 +62763,7 @@ async function action(env = process.env) {
   const headSha = inputOr("head-sha", event.headSha ?? "", env);
   const headBranch = inputOr("head-branch", event.headBranch ?? "", env);
   quietLogger();
+  const plain = plainConfig((name2) => input(name2, env), (name2) => `input \`${name2}\``);
   const advisories = await mergeNotes(client, env, event.commits);
   const releasePrs = await standingReleasePrs(client, env, base);
   const files = await pullRequestFiles(client, number, base, env);
@@ -62739,7 +62782,7 @@ async function action(env = process.env) {
     // The same ref the changed-file diff runs against, so one input decides
     // where both local reads look.
     baseRef: inputOr("diff-base", `origin/${base}`, env),
-    ...plainConfig(env) ? { plain: plainConfig(env) } : {},
+    ...plain ? { plain } : {},
     configFile: inputOr("config-file", DEFAULT_CONFIG_FILE, env),
     manifestFile: inputOr("manifest-file", DEFAULT_MANIFEST_FILE, env),
     releasePrs,
@@ -62780,26 +62823,6 @@ async function post(client, number, header, body) {
     }
     throw error;
   }
-}
-function plainConfig(env) {
-  const releaseType = input("release-type", env);
-  if (!releaseType) return void 0;
-  const known = (0, import_release_please4.getReleaserTypes)();
-  if (!known.includes(releaseType)) {
-    throw new Error(
-      `input \`release-type\` must be one of ${[...known].sort().join(", ")}; got \`${releaseType}\``
-    );
-  }
-  const path = input("package-path", env);
-  const component = input("component", env);
-  const separator = input("tag-separator", env);
-  return {
-    releaseType,
-    ...path ? { path } : {},
-    ...component ? { component } : {},
-    ...separator ? { tagSeparator: separator } : {},
-    ...input("include-component-in-tag", env) ? { includeComponentInTag: boolInput("include-component-in-tag", false, env) } : {}
-  };
 }
 function typeOverrides(env) {
   const visible = listInput("visible-types", env);
@@ -62903,6 +62926,11 @@ async function cli(argv2) {
       // which is the half that differs from release-please's own default.
       "include-component-in-tag": { type: "string" },
       "tag-separator": { type: "string" },
+      // Reach release-please only in this mode, exactly as on
+      // release-please-action, which passes them to `Manifest.fromConfig`
+      // and to nothing else.
+      "versioning-strategy": { type: "string" },
+      "release-as": { type: "string" },
       // The changed-file list, supplied rather than diffed. For driving the
       // tool where there is no checkout to diff -- a test, or a projection
       // reconstructed after the fact from a merge's file list.
@@ -62915,12 +62943,6 @@ async function cli(argv2) {
       out: { type: "string" }
     }
   });
-  const bool = (name3, value) => {
-    const text = value.toLowerCase();
-    if (text === "true") return true;
-    if (text === "false") return false;
-    throw new Error(`--${name3} must be true or false, got \`${value}\``);
-  };
   const title = values.title;
   if (!title) throw new Error("--title is required");
   const repo = values.repo;
@@ -62933,14 +62955,10 @@ async function cli(argv2) {
   const list = (value) => value ? value.split(/[\s,]+/).filter(Boolean) : void 0;
   const visible = list(values["visible-types"]);
   const hidden = list(values["hidden-types"]);
-  const releaseType = values["release-type"];
-  const plain = releaseType ? {
-    releaseType,
-    ...values["package-path"] ? { path: values["package-path"] } : {},
-    ...values.component ? { component: values.component } : {},
-    ...values["tag-separator"] ? { tagSeparator: values["tag-separator"] } : {},
-    ...values["include-component-in-tag"] === void 0 ? {} : { includeComponentInTag: bool("include-component-in-tag", values["include-component-in-tag"]) }
-  } : void 0;
+  const plain = plainConfig(
+    (name3) => values[name3],
+    (name3) => `--${name3}`
+  );
   const outcome = await buildComment({
     owner,
     repo: name2,

@@ -17,9 +17,8 @@ import { DEFAULT_HEADER, stick } from "./comment.js";
 import { changedFiles } from "./git.js";
 import { isMergeMethod, mergeAdvisories, MERGE_METHODS } from "./merge-method.js";
 import type { MergeMethod } from "./merge-method.js";
+import { plainConfig } from "./plain.js";
 import { DEFAULT_CONFIG_FILE, DEFAULT_MANIFEST_FILE } from "./project.js";
-import type { PlainConfig } from "./project.js";
-import { getReleaserTypes } from "release-please";
 import { indexReleasePrs } from "./release-prs.js";
 import { buildComment, quietLogger } from "./run.js";
 import {
@@ -100,6 +99,7 @@ export async function action(env: Env = process.env): Promise<void> {
 
   quietLogger();
 
+  const plain = plainConfig((name) => input(name, env), (name) => `input \`${name}\``);
   const advisories = await mergeNotes(client, env, event.commits);
   const releasePrs = await standingReleasePrs(client, env, base);
   const files = await pullRequestFiles(client, number, base, env);
@@ -119,7 +119,7 @@ export async function action(env: Env = process.env): Promise<void> {
     // The same ref the changed-file diff runs against, so one input decides
     // where both local reads look.
     baseRef: inputOr("diff-base", `origin/${base}`, env),
-    ...(plainConfig(env) ? { plain: plainConfig(env)! } : {}),
+    ...(plain ? { plain } : {}),
     configFile: inputOr("config-file", DEFAULT_CONFIG_FILE, env),
     manifestFile: inputOr("manifest-file", DEFAULT_MANIFEST_FILE, env),
     releasePrs,
@@ -185,43 +185,6 @@ async function post(
     }
     throw error;
   }
-}
-
-/**
- * plainConfig reads the non-manifest configuration, or undefined when the
- * repository uses a manifest.
- *
- * `release-type` is the switch, exactly as it is on release-please-action:
- * setting it means there is no release-please-config.json to read and the one
- * package is configured here instead. The type is validated against
- * release-please's own registry rather than passed through, so a typo is a
- * named error listing the valid types instead of a confusing failure deep
- * inside the manifest build.
- */
-function plainConfig(env: Env): PlainConfig | undefined {
-  const releaseType = input("release-type", env);
-  if (!releaseType) return undefined;
-
-  const known = getReleaserTypes();
-  if (!(known as readonly string[]).includes(releaseType)) {
-    throw new Error(
-      `input \`release-type\` must be one of ${[...known].sort().join(", ")};` +
-        ` got \`${releaseType}\``,
-    );
-  }
-
-  const path = input("package-path", env);
-  const component = input("component", env);
-  const separator = input("tag-separator", env);
-  return {
-    releaseType: releaseType as PlainConfig["releaseType"],
-    ...(path ? { path } : {}),
-    ...(component ? { component } : {}),
-    ...(separator ? { tagSeparator: separator } : {}),
-    ...(input("include-component-in-tag", env)
-      ? { includeComponentInTag: boolInput("include-component-in-tag", false, env) }
-      : {}),
-  };
 }
 
 /** typeOverrides reads the explicit changelog type lists, when given. */

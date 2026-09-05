@@ -30,9 +30,12 @@ const manifest = parse(
   runs: { using: string; main: string };
 };
 
-// Only action.ts, because it is the only file that names an input. Scanning
-// runner.ts too would pull in the placeholder names from its own tests.
+// action.ts and plain.ts, which are the only files that name an input:
+// plain.ts reads the non-manifest options for both entry points, so an input
+// the action offers can be named there rather than here. Scanning runner.ts
+// too would pull in the placeholder names from its own tests.
 const source = readFileSync(new URL("./action.ts", import.meta.url), "utf8");
+const plainSource = readFileSync(new URL("./plain.ts", import.meta.url), "utf8");
 
 /** literalsPassedTo collects the string literals handed to named functions. */
 function literalsPassedTo(text: string, callees: string[]): Set<string> {
@@ -42,11 +45,11 @@ function literalsPassedTo(text: string, callees: string[]): Set<string> {
   );
 }
 
-const read = literalsPassedTo(source, [
-  "input",
-  "inputOr",
-  "boolInput",
-  "listInput",
+const read = new Set([
+  ...literalsPassedTo(source, ["input", "inputOr", "boolInput", "listInput"]),
+  // plain.ts funnels every option it reads through one local accessor, so
+  // that is the callee to scan there.
+  ...literalsPassedTo(plainSource, ["value"]),
 ]);
 const declared = new Set(Object.keys(manifest.inputs));
 
@@ -422,6 +425,18 @@ describe("action's release configuration", () => {
     await expect(
       action(environment(server, { "INPUT_RELEASE-TYPE": "nodejs" })),
     ).rejects.toThrow(/must be one of .*\bnode\b.*got `nodejs`/s);
+  });
+
+  // The same builder the command line uses, so this is really about the half
+  // that differs: that the action names an input the way an input is named.
+  it("names the offending input when a plain-mode value is not valid", async () => {
+    const server = await start();
+    await expect(
+      action(environment(server, { "INPUT_VERSIONING-STRATEGY": "always-bump-path" })),
+    ).rejects.toThrow(/input `versioning-strategy` must be one of .*got `always-bump-path`/s);
+    await expect(
+      action(environment(server, { "INPUT_RELEASE-AS": "v2.4.0" })),
+    ).rejects.toThrow(/input `release-as` must be a version/);
   });
 
   it("carries the plain-mode package options through to the tag", async () => {

@@ -142,6 +142,25 @@ inputs:
       Like `component`, release-please-action exposes no input for this.
     required: false
     default: ""
+  versioning-strategy:
+    description: >-
+      How the version bumps, with `release-type`. Pass what your release
+      workflow passes: left alone release-please bumps a minor for `feat:`
+      and a patch for `fix:`, and `always-bump-patch` (say) releases a
+      feature as a patch. One of release-please's own strategies
+      (`default`, `always-bump-patch`, `prerelease`, ...).
+    required: false
+    default: ""
+  release-as:
+    description: >-
+      A version to release, with `release-type`, forcing every release to it.
+      Pass what your release workflow passes. This is the release-please
+      -action input, which is sticky -- it holds until the line is removed,
+      so a repository that has one releases that version and no other. The
+      `Release-As:` trailer in a pull request body is the per-commit form,
+      and this action reads that from the body already.
+    required: false
+    default: ""
 
   visible-types:
     description: >-

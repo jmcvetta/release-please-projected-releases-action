@@ -12,8 +12,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { changedFiles } from "./git.js";
+import { plainConfig } from "./plain.js";
 import { DEFAULT_CONFIG_FILE, DEFAULT_MANIFEST_FILE } from "./project.js";
-import type { PlainConfig } from "./project.js";
 import { loadReleasePrs } from "./release-prs.js";
 import { buildComment, quietLogger } from "./run.js";
 
@@ -55,6 +55,11 @@ export async function cli(argv: string[]): Promise<void> {
       // which is the half that differs from release-please's own default.
       "include-component-in-tag": { type: "string" },
       "tag-separator": { type: "string" },
+      // Reach release-please only in this mode, exactly as on
+      // release-please-action, which passes them to `Manifest.fromConfig`
+      // and to nothing else.
+      "versioning-strategy": { type: "string" },
+      "release-as": { type: "string" },
       // The changed-file list, supplied rather than diffed. For driving the
       // tool where there is no checkout to diff -- a test, or a projection
       // reconstructed after the fact from a merge's file list.
@@ -67,14 +72,6 @@ export async function cli(argv: string[]): Promise<void> {
       out: { type: "string" },
     },
   });
-
-  /** bool reads a flag written as `--flag=true` or `--flag=false`. */
-  const bool = (name: string, value: string): boolean => {
-    const text = value.toLowerCase();
-    if (text === "true") return true;
-    if (text === "false") return false;
-    throw new Error(`--${name} must be true or false, got \`${value}\``);
-  };
 
   const title = values.title;
   if (!title) throw new Error("--title is required");
@@ -92,20 +89,10 @@ export async function cli(argv: string[]): Promise<void> {
   const visible = list(values["visible-types"]);
   const hidden = list(values["hidden-types"]);
 
-  const releaseType = values["release-type"];
-  const plain: PlainConfig | undefined = releaseType
-    ? {
-        releaseType: releaseType as PlainConfig["releaseType"],
-        ...(values["package-path"] ? { path: values["package-path"] } : {}),
-        ...(values.component ? { component: values.component } : {}),
-        ...(values["tag-separator"]
-          ? { tagSeparator: values["tag-separator"] }
-          : {}),
-        ...(values["include-component-in-tag"] === undefined
-          ? {}
-          : { includeComponentInTag: bool("include-component-in-tag", values["include-component-in-tag"]) }),
-      }
-    : undefined;
+  const plain = plainConfig(
+    (name) => values[name as keyof typeof values] as string | undefined,
+    (name) => `--${name}`,
+  );
 
   const outcome = await buildComment({
     owner,

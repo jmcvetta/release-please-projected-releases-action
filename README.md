@@ -108,8 +108,12 @@ where your release workflow does not and the projection describes a
 configuration that will never run; the comment says so when it can tell, which
 is when the config files are in the checkout.
 
-`component` and `tag-separator` have no counterpart on `release-please-action`
-at all, so leave them alone unless something else cuts your releases. Nor,
-going the other way, does this action model `versioning-strategy` or
-`release-as`: set either in your release workflow and the projected version
-will not match the one released.
+`versioning-strategy` and `release-as` are passed the same way, and matter for
+the same reason: a workflow bumping with `always-bump-patch` releases a feature
+as a patch, and `release-as` is sticky — it holds until the line is removed. A
+projection that has not been told about either reports the version a default
+repository would get.
+
+`component` and `tag-separator` go the other way: `release-please-action` has
+no input for them at all, so leave them alone unless something other than it
+cuts your releases.
