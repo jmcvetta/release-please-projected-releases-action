@@ -185,6 +185,51 @@ describe("cli", () => {
   // The command line used to build the plain configuration itself and
   // validated none of it, so this reached release-please as a release type it
   // has never heard of. Both entry points read one builder now.
+  // Manifest mode, which is what a repository with the two files gets and
+  // what `--release-type` switches off. Every other case here passes that
+  // flag, so without this the flagless half of the switch -- and the config
+  // and manifest flags that only mean anything there -- ran in no test of
+  // either entry point.
+  describe("without a release type", () => {
+    const CONFIG = { packages: { ".": { "release-type": "node" } } };
+    const MANIFEST = { ".": "1.0.0" };
+
+    /** checkout writes the two files the way a repository carrying them
+     * would, and returns the root to read them from. */
+    function checkout(): string {
+      const root = tmp();
+      writeFileSync(join(root, "release-please-config.json"), JSON.stringify(CONFIG));
+      writeFileSync(join(root, ".release-please-manifest.json"), JSON.stringify(MANIFEST));
+      return root;
+    }
+
+    /** without drops `--release-type` from the ordinary invocation. */
+    async function without(extra: string[], over: Partial<FakeRepo> = {}) {
+      const argv = await flags(extra, {
+        files: {
+          "package.json": JSON.stringify({ name: "widgets", version: "1.0.0" }),
+          "release-please-config.json": JSON.stringify(CONFIG),
+          ".release-please-manifest.json": JSON.stringify(MANIFEST),
+        },
+        ...over,
+      });
+      const at = argv.indexOf("--release-type");
+      argv.splice(at, 2);
+      return argv;
+    }
+
+    it("projects from the files in the checkout", async () => {
+      await cli(await without(["--repo-root", checkout()]));
+      expect(printed()).toContain("**1.1.0**");
+    });
+
+    it("says which mode a checkout with no files is missing", async () => {
+      await expect(cli(await without(["--repo-root", tmp()]))).rejects.toThrow(
+        /no `release-please-config\.json`.*`release-type`/s,
+      );
+    });
+  });
+
   it("names the release types when the given one is not among them", async () => {
     await expect(
       cli(await flags(["--release-type", "nodejs"])),
