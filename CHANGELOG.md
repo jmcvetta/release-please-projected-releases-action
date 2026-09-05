@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/jmcvetta/release-please-projected-releases-action/compare/v0.3.0...v0.3.1) (2026-09-04)
+
+
+### Performance Improvements
+
+* read the history once and take commit file lists from git ([#57](https://github.com/jmcvetta/release-please-projected-releases-action/issues/57)) ([a6f571f](https://github.com/jmcvetta/release-please-projected-releases-action/commit/a6f571fb86f657b34e58667cf7df007b162cfa06))
+
 ## [0.3.0](https://github.com/jmcvetta/release-please-projected-releases-action/compare/v0.2.3...v0.3.0) (2026-09-04)
 
 
